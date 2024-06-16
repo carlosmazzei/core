@@ -1,0 +1,13 @@
+{
+  "domain": "scenario_ifsei",
+  "name": "Scenario IFSEI",
+  "codeowners": ["@carlosmazzei"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://www.home-assistant.io/integrations/scenario_ifsei",
+  "homekit": {},
+  "iot_class": "local_push",
+  "requirements": ["telnetlib3==2.0.4", "PyYAML==6.0.1", "asyncio==3.4.3"],
+  "ssdp": [],
+  "zeroconf": []
+}

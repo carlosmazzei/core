@@ -467,6 +467,7 @@ FLOWS = {
         "sabnzbd",
         "samsungtv",
         "sanix",
+        "scenario_ifsei",
         "schlage",
         "scrape",
         "screenlogic",
