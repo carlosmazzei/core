@@ -111,6 +111,9 @@ PyViCare==2.32.0
 # homeassistant.components.xiaomi_aqara
 PyXiaomiGateway==0.14.3
 
+# homeassistant.components.scenario_ifsei
+PyYAML==6.0.1
+
 # homeassistant.components.rachio
 RachioPy==1.1.0
 
@@ -497,6 +500,9 @@ asyncarve==0.1.1
 
 # homeassistant.components.keyboard_remote
 asyncinotify==4.0.2
+
+# homeassistant.components.scenario_ifsei
+asyncio==3.4.3
 
 # homeassistant.components.supla
 asyncpysupla==0.0.5
@@ -2699,6 +2705,9 @@ tellcore-py==1.1.2
 
 # homeassistant.components.tellduslive
 tellduslive==0.10.11
+
+# homeassistant.components.scenario_ifsei
+telnetlib3==2.0.4
 
 # homeassistant.components.lg_soundbar
 temescal==0.5
