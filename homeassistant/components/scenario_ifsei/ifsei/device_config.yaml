@@ -87,15 +87,6 @@ lights:
         module: 5
         channel: 7
         isDimmeable: false
-  - id: 8
-    name: Area de Servico - Externo
-    zone: 1
-    isRGB: false
-    address:
-      - name: w
-        module: 5
-        channel: 7
-        isDimmeable: false
   - id: 9
     name: Balizador
     zone: 7
