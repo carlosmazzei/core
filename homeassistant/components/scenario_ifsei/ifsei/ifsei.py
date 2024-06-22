@@ -10,7 +10,7 @@ import os
 import socket
 
 import telnetlib3
-from telnetlib3 import TelnetReader, TelnetWriter
+from telnetlib3 import TelnetClient, TelnetReader, TelnetWriter
 
 from .manager import DeviceManager
 
@@ -64,7 +64,6 @@ class TaskManager:
 
     send_task: Task | None = None
     receive_task: Task | None = None
-    process_task: Task | None = None
 
 
 class IFSEI:
@@ -77,12 +76,13 @@ class IFSEI:
         else:
             self.network_config = network_config
         self.connection: tuple[TelnetReader, TelnetWriter] | None = None
-        self.callback = None
         self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.queue_manager = QueueManager()
-        self.task_manager = TaskManager()
+        self.process_task: Task | None = None
         self.name = "Scenario IFSEI"
+        self._telnetclient = None
 
+        # Load device configuration file
         current_module_path = __file__
         absolute_module_path = os.path.abspath(current_module_path)
         current_directory = os.path.dirname(absolute_module_path)
@@ -110,155 +110,42 @@ class IFSEI:
         with open(config_file, encoding="utf-8") as file:
             return json.load(file)
 
-    async def connect(self):
+    async def connect(self) -> bool:
         """Connect to the IFSEI device."""
-        retry_attempts = 3
-        for attempt in range(retry_attempts):
-            try:
-                logger.info(
-                    "Trying to connect to %s:%s",
-                    self.network_config.host,
-                    self.network_config.tcp_port,
-                )
-                reader, writer = await telnetlib3.open_connection(
-                    self.network_config.host, self.network_config.tcp_port
-                )
-            except Exception as e:
-                logger.error(
-                    "Failed to connect to %s:%s: %s",
-                    self.network_config.host,
-                    self.network_config.tcp_port,
-                    e,
-                )
-                if attempt < retry_attempts - 1:
-                    logger.info(
-                        "Retrying (%s of %s) in %s seconds...",
-                        attempt + 1,
-                        retry_attempts,
-                        RETRY_DELAY,
-                    )
-                    await asyncio.sleep(RETRY_DELAY)
-                else:
-                    raise
-            else:
-                self.connection: tuple[TelnetReader, TelnetWriter] = (reader, writer)
-                self._start_tasks()
-                return reader, writer
 
-    def _start_tasks(self):
-        self.task_manager.send_task = asyncio.create_task(self._send_data())
-        self.task_manager.receive_task = asyncio.create_task(self._receive_data())
-        self.task_manager.process_task = asyncio.create_task(self._process_responses())
-
-    async def disconnect(self):
-        """Disconnect from the IFSEI device."""
         try:
-            tasks = [
-                self.task_manager.send_task,
-                self.task_manager.receive_task,
-                self.task_manager.process_task,
-            ]
-            for task in tasks:
-                if task:
-                    task.cancel()
-                    try:
-                        await task
-                    except asyncio.CancelledError:
-                        logger.info("Task %s successfully cancelled.", task.get_name())
-            _, writer = self.connection
-            writer.close()
-            await writer.wait_closed()
-            logger.info("Disconnected")
+            logger.info(
+                "Trying to connect to %s:%s",
+                self.network_config.host,
+                self.network_config.tcp_port,
+            )
+            reader, writer = await telnetlib3.open_connection(
+                self.network_config.host,
+                self.network_config.tcp_port,
+                client_factory=self._create_client,
+            )
         except Exception as e:
-            logger.error("Failed to disconnect: %s", e)
+            logger.error(
+                "Failed to connect to %s:%s: %s.",
+                self.network_config.host,
+                self.network_config.tcp_port,
+                e,
+            )
             raise
+        else:
+            self.connection = (reader, writer)
+            self.process_task = asyncio.create_task(self._process_responses())
+            return True
+
+    def _create_client(self, **kwds):
+        self._telnetclient = telnetclient = _IFSEITelnetClient(
+            self, self.queue_manager, **kwds
+        )
+        return telnetclient
 
     async def send_command(self, command):
         """Send a command to the send queue."""
         await self.queue_manager.send_queue.put(command)
-
-    async def _send_data(self):
-        """Send data to the IFSEI device from the queue."""
-        try:
-            logger.info("Starting data sending loop")
-            while True:
-                command = await self.queue_manager.send_queue.get()
-                if self.network_config.protocol == Protocol.TCP:
-                    await self._send_command_tcp(command)
-                elif self.network_config.protocol == Protocol.UDP:
-                    self._send_command_udp(command)
-        except asyncio.CancelledError:
-            logger.info("Send task cancelled")
-
-    async def _send_command_tcp(self, command: str) -> bool:
-        """Send command using TCP."""
-        try:
-            if self.connection is None:
-                logger.info("Problem sending the command.")
-                return False
-
-            _, writer = self.connection
-            writer.write(command + "\r")
-            await writer.drain()
-        except Exception as e:
-            logger.error("Failed to send command %s over TCP: %s", command, e)
-            raise
-        else:
-            logger.info("Command sent (TCP): %s", command)
-            return True
-
-    def _send_command_udp(self, command):
-        """Send command using UDP."""
-        try:
-            self.udp_socket.sendto(
-                (command + "\r").encode(),
-                (self.network_config.host, self.network_config.udp_port),
-            )
-            logger.info("Command sent (UDP): %s", command)
-
-        except Exception as e:
-            logger.error("Failed to send command %s over UDP: %s", command, e)
-            raise
-
-    def set_callback(self, callback):
-        """Set a callback function to be called when a response is received."""
-        self.callback = callback
-
-    async def _receive_data(self):
-        """Receive data from the IFSEI device."""
-        try:
-            logger.info("Starting data receiving loop")
-            while True:
-                if self.connection is None:
-                    await asyncio.sleep(0.1)  # Wait for the reader to be set
-                    continue
-                response = await self._read_until_prompt()
-                if response:
-                    await self.queue_manager.receive_queue.put(response)
-        except Exception as e:
-            logger.error("Error receiving data: %s", e)
-            raise
-
-    async def _read_until_prompt(self):
-        """Read data from the IFSEI device until a prompt is received."""
-        try:
-            response = ""
-            reader, _ = self.connection
-            while True:
-                if self.network_config.protocol == Protocol.TCP:
-                    char = await reader.read(1)
-                elif self.network_config.protocol == Protocol.UDP:
-                    char, _ = await self.udp_socket.recvfrom(BUFFER_SIZE)
-                response += char
-                if response.endswith(RESPONSE_TERMINATOR):
-                    break
-            return response.strip()[:-2]
-        except asyncio.exceptions.CancelledError:
-            logger.info("Data receiving loop cancelled")
-            return response.strip()
-        except Exception as e:
-            logger.error("Error reading data: %s", e)
-            raise
 
     async def _process_responses(self):
         """Process responses from the IFSEI device."""
@@ -286,21 +173,17 @@ class IFSEI:
 
         if response.startswith("E"):
             self._handle_error(response)
-        else:
-            if self.callback:
-                self.callback(response)
-            logger.info("Received response: %s", response)
 
     def _handle_zone_response(self, response):
         """Handle a zone response from the IFSEI device."""
-        # Dimmer Status: Z{module_number:2}{channel:2}L{level:3}
-        module_number = int(response[1:3])
-        channel = int(response[3:5])
-        intensity = int(response[6:9])
+        # Dimmer Status: *Z{module_number:2}{channel:2}L{level:3}
+        module_number = int(response[2:4])
+        channel = int(response[4:6])
+        intensity = int(response[7:10])
         logger.info(
             "Zone %s state: %s intensity: %s", module_number, channel, intensity
         )
-        self.device_manager.update_device_intensity(module_number, channel, intensity)
+        self.device_manager.set_device_state(module_number, channel, intensity)
 
     def _handle_error(self, response):
         """Handle an error response from the IFSEI device."""
@@ -388,17 +271,17 @@ class IFSEI:
         """Decrease scene intensity."""
         return await self.send_command(f"$D{module_address:02}C-")
 
-    async def increase_zone_intensity(self, module_address, zone_number):
-        """Increase zone intensity."""
-        return await self.send_command(f"$D{module_address:02}Z{zone_number}+")
+    # async def increase_zone_intensity(self, module_address, zone_number):
+    #     """Increase zone intensity."""
+    #     return await self.send_command(f"$D{module_address:02}Z{zone_number}+")
 
-    async def decrease_zone_intensity(self, module_address, zone_number):
-        """Decrease zone intensity."""
-        return await self.send_command(f"$D{module_address:02}Z{zone_number}-")
+    # async def decrease_zone_intensity(self, module_address, zone_number):
+    #     """Decrease zone intensity."""
+    #     return await self.send_command(f"$D{module_address:02}Z{zone_number}-")
 
-    async def record_scene(self, module_address):
-        """Record scene."""
-        return await self.send_command(f"$D{module_address:02}GRAVA")
+    # async def record_scene(self, module_address):
+    #     """Record scene."""
+    #     return await self.send_command(f"$D{module_address:02}GRAVA")
 
     async def get_module_configuration(self, module_address, setup_number):
         """Get module configuration."""
@@ -411,3 +294,132 @@ class IFSEI:
     async def execute_macro_key_release(self, prid, key_number):
         """Execute macro key release."""
         return await self.send_command(f"I{prid}{key_number}R")
+
+
+class _IFSEITelnetClient(TelnetClient):
+    """Protocol to have the base client."""
+
+    def __init__(
+        self, connection: IFSEI, queue_manager: QueueManager, *args, **kwds
+    ) -> None:
+        """Initialize protocol to handle connection errors."""
+        super().__init__(*args, **kwds)
+        self.connection = connection
+        self.task_manager = TaskManager()
+        self.queue_manager = queue_manager
+        self.shell = self._run_shell
+
+    async def _run_shell(self, reader, writer):
+        await self._start_tasks()
+
+    async def _start_tasks(self):
+        self._stop_tasks()
+        logger.info("Starting tasks.")
+        self.task_manager.send_task = asyncio.create_task(self._send_data())
+        self.task_manager.receive_task = asyncio.create_task(self._receive_data())
+
+    def _stop_tasks(self):
+        tasks = [self.task_manager.send_task, self.task_manager.receive_task]
+        for task in tasks:
+            if task:
+                task.cancel()
+                logger.info(f"Stopping task: {task.get_name()}")  # noqa: G004
+                try:
+                    # await task
+                    task = None
+                except asyncio.CancelledError:
+                    logger.info("Task %s successfully cancelled.", task.get_name())
+
+    async def _send_data(self):
+        """Send data to the IFSEI device from the queue."""
+        try:
+            logger.info("Starting data sending loop")
+            while True:
+                command = await self.queue_manager.send_queue.get()
+                if self.connection.network_config.protocol == Protocol.TCP:
+                    await self._send_command_tcp(command)
+                elif self.connection.network_config.protocol == Protocol.UDP:
+                    self._send_command_udp(command)
+        except asyncio.CancelledError:
+            logger.info("Send task cancelled")
+
+    async def _send_command_tcp(self, command: str) -> None:
+        """Send command using TCP."""
+        try:
+            self.writer.write(command + "\r")
+            await self.writer.drain()
+        except ConnectionResetError:
+            logger.error("Connection reset")
+            raise
+        except Exception as e:
+            logger.error("Failed to send command %s over TCP: %s", command, e)
+            raise
+        else:
+            logger.info("Command sent (TCP): %s", command)
+
+    def _send_command_udp(self, command):
+        """Send command using UDP."""
+        try:
+            self.connection.udp_socket.sendto(
+                (command + "\r").encode(),
+                (
+                    self.connection.network_config.host,
+                    self.connection.network_config.udp_port,
+                ),
+            )
+            logger.info("Command sent (UDP): %s", command)
+
+        except Exception as e:
+            logger.error("Failed to send command %s over UDP: %s", command, e)
+            raise
+
+    async def _receive_data(self):
+        """Receive data from the IFSEI device."""
+        try:
+            logger.info("Starting data receiving loop")
+            while True:
+                if self.connection is None:
+                    await asyncio.sleep(0.1)  # Wait for the reader to be set
+                    continue
+                response = await self._read_until_prompt()
+                if response:
+                    await self.queue_manager.receive_queue.put(response)
+        except Exception as e:
+            logger.error("Error receiving data: %s", e)
+            raise
+
+    async def _read_until_prompt(self):
+        """Read data from the IFSEI device until a prompt is received."""
+        try:
+            response = ""
+            while True:
+                if self.connection.network_config.protocol == Protocol.TCP:
+                    char = await self.reader.read(1)
+                elif self.connection.network_config.protocol == Protocol.UDP:
+                    char, _ = await self.connection.udp_socket.recvfrom(BUFFER_SIZE)
+                response += char
+                if response.endswith(RESPONSE_TERMINATOR):
+                    break
+            return response.strip()[:-2]
+        except asyncio.exceptions.CancelledError:
+            logger.info("Data receiving loop cancelled")
+            raise
+        except Exception as e:
+            logger.error("Error reading data: %s", e)
+            raise
+
+    def connection_lost(self, exc: None | Exception, /) -> None:
+        # This is called each time when you connection is lost
+        super().connection_lost(exc)
+        self._stop_tasks()
+
+    async def close(self):
+        """Disconnect from the IFSEI device."""
+        try:
+            await self._stop_tasks()
+            self.writer.close()
+            await self.writer.wait_closed()
+            logger.info("Disconnected")
+        except Exception as e:
+            logger.error("Failed to disconnect: %s", e)
+            raise

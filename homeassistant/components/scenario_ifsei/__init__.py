@@ -59,10 +59,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         _LOGGER.debug("Trying to connect to ifsei")
         await ifsei.connect()
-    except TimeoutError as e:
+    except (ConnectionRefusedError, TimeoutError) as e:
         raise ConfigEntryNotReady(  # noqa: B904
             f"Timed out while trying to connect to {host}, error {e}"
         )
+    except:
+        _LOGGER.debug("Problem while connectiing")
+        raise
 
     _LOGGER.debug(f"Connected to host: {host}:{port}, protocol: {protocol}")  # noqa: G004
 
@@ -87,9 +90,9 @@ def _async_register_scenario_device(
     device_registry = dr.async_get(hass)
     device_args = DeviceInfo(
         name="Scenario IFSEI",
-        manufacturer="Scenario",
+        manufacturer=MANUFACTURER,
         identifiers={(DOMAIN, ifsei.get_device_id())},
-        model="Scenario (IFSEI)",
+        model="IFSEI Classic",
         via_device=(DOMAIN, ifsei.get_device_id()),
         configuration_url="https://scenario.com.br",
     )
@@ -123,6 +126,10 @@ class ScenarioUpdatableEntity(Entity):
             via_device=(DOMAIN, str(self._device_id)),
         )
         self._attr_device_info = info
+
+    async def async_added_to_hass(self):
+        """Register callbacks."""
+        self._device.add_subscriber(self.async_write_ha_state)
 
     async def async_update(self) -> None:
         """Update when forcing a refresh of the device."""
