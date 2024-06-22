@@ -76,6 +76,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryNotReady(  # noqa: B904
             f"Timed out while trying to connect to {host}, error {e}"
         )
+    except:
+        _LOGGER.debug("Problem while connectiing")
+        raise
 
     _LOGGER.debug(f"Connected to host: {host}:{port}, protocol: {protocol}")  # noqa: G004
 
