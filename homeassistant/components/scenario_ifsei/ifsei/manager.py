@@ -1,5 +1,6 @@
 """Device Manager."""
 
+from collections.abc import Callable
 from typing import Any
 
 import yaml
@@ -14,6 +15,7 @@ class Device:
         self._name: str = ""
         self._zone: int = -1
         self._address: dict[str, Any] = {}
+        self.callback_: Callable[[], None] | None = None
         self.state = 0
 
     def update_state(self, state):
@@ -31,6 +33,10 @@ class Device:
     def get_address(self):
         """Return address."""
         return self._address
+
+    def add_subscriber(self, callback_: Callable[[], None]):
+        """Set a callback function to be called when a response is received."""
+        self.callback_ = callback_
 
 
 class Light(Device):
@@ -69,13 +75,15 @@ class DeviceManager:
 
         lights = []
         for light_data in data["lights"]:
-            address = light_data.get("address", [])
+            addresses = light_data.get("address", [])
+            for address in addresses:
+                address["state"] = 0
             light = Light(
                 unique_id=light_data["id"],
-                name=light_data["name"],
+                name=f"{light_data["name"]} - {light_data["zone"]}",
                 zone=light_data["zone"],
                 is_rgb=light_data["isRGB"],
-                address=address,
+                address=addresses,
             )
             lights.append(light)
 
@@ -107,12 +115,19 @@ class DeviceManager:
             if device.unique_id == id:
                 return device
 
-    # def update_device_intensity(self, module_number, channel, intensity):
-    #     """Update device intensity and added it to the dictionary if not found by module_number and channel."""
-    #     device_key = (module_number, channel)
-    #     if device_key in self.devices:
-    #         device = self.devices[device_key]
-    #         device.update_state(intensity)
+    def set_device_state(self, module_number, channel, state):
+        """Update device intensity."""
+        for light in self._lights:
+            if (
+                light.get_address()[0]["module"] == module_number
+                and light.get_address()[0]["channel"] == channel
+            ):
+                light.get_address()[0]["state"] = state
+
+                if light.callback_ is not None:
+                    light.callback_()
+
+                return
 
     async def update_device_state(self, device_id, value):
         """Update device state."""
@@ -123,4 +138,8 @@ class DeviceManager:
                     device.get_address()[0]["channel"],
                     value,
                 )
+
+                if device.callback_ is not None:
+                    device.callback_()
+
                 return

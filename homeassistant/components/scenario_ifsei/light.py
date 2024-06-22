@@ -44,17 +44,31 @@ class ScenarioLight(ScenarioUpdatableEntity, LightEntity):
         """Initialize a scenario light."""
         super().__init__(light, ifsei)
 
-        self._attr_supported_color_modes = {ColorMode.BRIGHTNESS}
+        addresses = light.get_address()
+
+        if not light.get_is_rgb():
+            for address in addresses:
+                if address["isDimmeable"]:
+                    self._attr_supported_color_modes = {ColorMode.BRIGHTNESS}
+                else:
+                    self._attr_supported_color_modes = {ColorMode.ONOFF}
+        else:
+            self._attr_supported_color_modes = {ColorMode.RGBW}
+
+    @property
+    def color_mode(self) -> ColorMode:
+        """Return the color mode."""
+        return ColorMode.BRIGHTNESS
 
     @property
     def is_on(self) -> bool:
         """Return whether this light is on or off."""
-        return self._device.state > 0
+        return self._device.get_address()[0]["state"] > 0
 
     @property
     def brightness(self) -> int:
         """Return the brightness of the light."""
-        return to_hass_level(self._device.state)
+        return to_hass_level(self._device.get_address()[0]["state"])
 
     async def _async_set_brightness(
         self, brightness: int | None, **kwargs: Any
