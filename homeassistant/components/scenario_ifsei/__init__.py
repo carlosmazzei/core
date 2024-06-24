@@ -7,8 +7,14 @@ import logging
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, CONF_PORT, CONF_PROTOCOL, Platform
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.const import (
+    CONF_HOST,
+    CONF_PORT,
+    CONF_PROTOCOL,
+    EVENT_HOMEASSISTANT_STOP,
+    Platform,
+)
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
 import homeassistant.helpers.config_validation as cv
@@ -45,8 +51,6 @@ PLATFORMS: list[Platform] = [Platform.LIGHT]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Scenario IFSEI from a config entry."""
-    hass.data.setdefault(DOMAIN, {})
-    entry_data = hass.data[DOMAIN].setdefault(entry.entry_id, {})
 
     entry_id = entry.entry_id
     host = entry.data[CONF_HOST]
@@ -63,9 +67,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryNotReady(  # noqa: B904
             f"Timed out while trying to connect to {host}, error {e}"
         )
-    except:
-        _LOGGER.debug("Problem while connectiing")
-        raise
+    # except:
+    #     _LOGGER.debug("Connect error")
+    #     raise ConfigEntryNotReady("Device not ready")  # noqa: B904
 
     _LOGGER.debug(f"Connected to host: {host}:{port}, protocol: {protocol}")  # noqa: G004
 
@@ -74,8 +78,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _async_register_scenario_device(hass, entry_id, ifsei)
 
+    hass.data.setdefault(DOMAIN, {})
+    entry_data = hass.data[DOMAIN].setdefault(entry.entry_id, {})
     entry_data[CONTROLLER_ENTRY] = ifsei
     entry_data[LIGHTS_ENTRY] = ifsei.device_manager.get_devices_by_type("light")
+
+    async def on_hass_stop(event: Event) -> None:
+        """Stop push updates when hass stops."""
+        await ifsei.close()
+
+    entry.async_on_unload(
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, on_hass_stop)
+    )
+    entry.async_on_unload(ifsei.close)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -127,13 +142,7 @@ class ScenarioUpdatableEntity(Entity):
         )
         self._attr_device_info = info
 
-    async def async_added_to_hass(self):
-        """Register callbacks."""
-        self._device.add_subscriber(self.async_write_ha_state)
-
-    async def async_update(self) -> None:
-        """Update when forcing a refresh of the device."""
-        self._device = self._ifsei.device_manager.get_device_by_id(
-            self._device.get_device_id()
-        )
-        _LOGGER.debug(self._device)
+    @property
+    def available(self):
+        """Check availability of the device."""
+        return self._ifsei.is_connected
