@@ -70,7 +70,9 @@ class ScenarioLight(ScenarioUpdatableEntity, LightEntity):
     @property
     def brightness(self) -> int:
         """Return the brightness of the light."""
-        return to_hass_level(self._device.get_address()[0]["state"])
+        if self._attr_brightness is not None:
+            return self._attr_brightness
+        return 0
 
     async def _async_set_brightness(
         self, brightness: int | None, **kwargs: Any
@@ -127,6 +129,6 @@ class ScenarioLight(ScenarioUpdatableEntity, LightEntity):
                 self._attr_is_on = False
             else:
                 self._attr_is_on = True
-                self._attr_brightness = brightness
+                self._attr_brightness = to_hass_level(brightness)
 
         self.async_write_ha_state()
