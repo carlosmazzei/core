@@ -38,6 +38,10 @@ class Device:
         """Set a callback function to be called when a response is received."""
         self.callback_ = callback_
 
+    def remove_subscriber(self):
+        """Remove callback function."""
+        self.callback_ = None
+
 
 class Light(Device):
     """Light class."""
@@ -115,7 +119,7 @@ class DeviceManager:
             if device.unique_id == id:
                 return device
 
-    def set_device_state(self, module_number, channel, state):
+    async def handle_state_change(self, module_number, channel, state):
         """Update device intensity."""
         for light in self._lights:
             if (
@@ -125,7 +129,7 @@ class DeviceManager:
                 light.get_address()[0]["state"] = state
 
                 if light.callback_ is not None:
-                    light.callback_()
+                    light.callback_(brightness=state)
 
                 return
 
@@ -139,7 +143,10 @@ class DeviceManager:
                     value,
                 )
 
-                if device.callback_ is not None:
-                    device.callback_()
-
                 return
+
+    def notify(self, **kwargs):
+        """Notify change."""
+        for device in self._lights:
+            if device.callback_ is not None:
+                device.callback_(**kwargs)

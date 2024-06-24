@@ -58,12 +58,14 @@ class ScenarioLight(ScenarioUpdatableEntity, LightEntity):
     @property
     def color_mode(self) -> ColorMode:
         """Return the color mode."""
-        return ColorMode.BRIGHTNESS
+        return ColorMode.ONOFF
 
     @property
     def is_on(self) -> bool:
         """Return whether this light is on or off."""
-        return self._device.get_address()[0]["state"] > 0
+        if self._attr_is_on is not None:
+            return self._attr_is_on
+        return False
 
     @property
     def brightness(self) -> int:
@@ -102,3 +104,29 @@ class ScenarioLight(ScenarioUpdatableEntity, LightEntity):
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the light off."""
         await self._async_set_brightness(0, **kwargs)
+
+    async def async_added_to_hass(self):
+        """Register callbacks."""
+        self._device.add_subscriber(self.async_update_callback)
+
+    async def async_will_remove_from_hass(self):
+        """Remove callbacks."""
+        self._device.remove_subscriber()
+
+    def async_update_callback(self, **kwargs: Any):
+        """Update callback."""
+
+        brightness = kwargs.pop("brightness", None)
+        available = kwargs.pop("available", None)
+
+        if available is not None:
+            self._attr_is_on = available
+
+        if brightness is not None:
+            if brightness == 0:
+                self._attr_is_on = False
+            else:
+                self._attr_is_on = True
+                self._attr_brightness = brightness
+
+        self.async_write_ha_state()

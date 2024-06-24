@@ -2,6 +2,7 @@
 
 import asyncio
 from asyncio import Queue, Task
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 import json
@@ -137,11 +138,20 @@ class IFSEI:
             self.process_task = asyncio.create_task(self._process_responses())
             return True
 
+    async def close(self):
+        """Close client connection."""
+        await self._telnetclient.close()
+
     def _create_client(self, **kwds):
         self._telnetclient = telnetclient = _IFSEITelnetClient(
-            self, self.queue_manager, **kwds
+            self, self.queue_manager, self.on_connection_lost, **kwds
         )
         return telnetclient
+
+    def on_connection_lost(self):
+        """Lost connection callback."""
+        logger.info("Lost connection callback from ifsei")
+        self.set_is_connected(False)
 
     async def send_command(self, command):
         """Send a command to the send queue."""
@@ -153,28 +163,28 @@ class IFSEI:
             logger.info("Starting response processing loop")
             while True:
                 response = await self.queue_manager.receive_queue.get()
-                self._handle_response(response)
+                await self._handle_response(response)
         except asyncio.CancelledError:
             logger.info("Process responses task cancelled")
         except Exception as e:
             logger.error("Error processing responses: %s", e)
             raise
 
-    def _handle_response(self, response):
+    async def _handle_response(self, response):
         """Handle a response from the IFSEI device."""
 
         logger.info("Received response: %s", response)
 
         if response == "*IFSEION":
-            self.is_connected = True
+            self.set_is_connected(True)
 
         elif response.startswith("*Z"):
-            self._handle_zone_response(response)
+            await self._handle_zone_response(response)
 
         if response.startswith("E"):
-            self._handle_error(response)
+            await self._handle_error(response)
 
-    def _handle_zone_response(self, response):
+    async def _handle_zone_response(self, response):
         """Handle a zone response from the IFSEI device."""
         # Dimmer Status: *Z{module_number:2}{channel:2}L{level:3}
         module_number = int(response[2:4])
@@ -183,9 +193,9 @@ class IFSEI:
         logger.info(
             "Zone %s state: %s intensity: %s", module_number, channel, intensity
         )
-        self.device_manager.set_device_state(module_number, channel, intensity)
+        await self.device_manager.handle_state_change(module_number, channel, intensity)
 
-    def _handle_error(self, response):
+    async def _handle_error(self, response):
         """Handle an error response from the IFSEI device."""
         error_code = response.strip().split(" ")[0]
         error_message = ERROR_CODES.get(error_code, f"Unknown error code: {error_code}")
@@ -201,6 +211,11 @@ class IFSEI:
     def get_device_id(self):
         """Get device unique id."""
         return "ifsei-scenario"
+
+    def set_is_connected(self, is_available: bool = False):
+        """Set connection status."""
+        self.is_connected = is_available
+        self.device_manager.notify(available=is_available)
 
     # Commands for control/configuration
     async def get_version(self):
@@ -300,7 +315,12 @@ class _IFSEITelnetClient(TelnetClient):
     """Protocol to have the base client."""
 
     def __init__(
-        self, connection: IFSEI, queue_manager: QueueManager, *args, **kwds
+        self,
+        connection: IFSEI,
+        queue_manager: QueueManager,
+        on_connection_lost_callback: Callable[[], None] | None,
+        *args,
+        **kwds,
     ) -> None:
         """Initialize protocol to handle connection errors."""
         super().__init__(*args, **kwds)
@@ -308,6 +328,9 @@ class _IFSEITelnetClient(TelnetClient):
         self.task_manager = TaskManager()
         self.queue_manager = queue_manager
         self.shell = self._run_shell
+        self.on_connection_lost_callback: Callable[[], None] | None = (
+            on_connection_lost_callback
+        )
 
     async def _run_shell(self, reader, writer):
         await self._start_tasks()
@@ -412,11 +435,13 @@ class _IFSEITelnetClient(TelnetClient):
         # This is called each time when you connection is lost
         super().connection_lost(exc)
         self._stop_tasks()
+        if self.on_connection_lost_callback is not None:
+            self.on_connection_lost_callback()
 
     async def close(self):
         """Disconnect from the IFSEI device."""
         try:
-            await self._stop_tasks()
+            self._stop_tasks()
             self.writer.close()
             await self.writer.wait_closed()
             logger.info("Disconnected")
