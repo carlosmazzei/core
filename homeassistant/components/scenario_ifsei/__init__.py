@@ -76,9 +76,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryNotReady(  # noqa: B904
             f"Timed out while trying to connect to {host}, error {e}"
         )
-    except:
-        _LOGGER.debug("Problem while connectiing")
-        raise
+    # except:
+    #     _LOGGER.debug("Connect error")
+    #     raise ConfigEntryNotReady("Device not ready")  # noqa: B904
 
     _LOGGER.debug(f"Connected to host: {host}:{port}, protocol: {protocol}")  # noqa: G004
 
@@ -101,6 +101,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, on_hass_stop)
     )
     entry.async_on_unload(ifsei.async_close)
+
+    async def on_hass_stop(event: Event) -> None:
+        """Stop push updates when hass stops."""
+        await ifsei.close()
+
+    entry.async_on_unload(
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, on_hass_stop)
+    )
+    entry.async_on_unload(ifsei.close)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
