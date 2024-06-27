@@ -19,7 +19,7 @@ DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_HOST): str,
         vol.Required(CONF_PORT): str,
-        vol.Required(CONF_PROTOCOL): str,
+        vol.Required(CONF_PROTOCOL, default="TCP"): vol.Any("TCP", "UDP"),
     }
 )
 
@@ -42,7 +42,7 @@ class ScenarioValidator:
     async def connect_to_ifsei(self) -> bool:
         """Connect to IFSEI interface."""
         try:
-            await self.ifsei.connect()
+            await self.ifsei.async_connect()
         except TimeoutError as e:
             _LOGGER.debug(f"Failed to connect to controller, error: {e}")  # noqa: G004
             return False

@@ -5,6 +5,8 @@ from typing import Any
 
 import yaml
 
+from .config_schema import device_config_schema
+
 
 class Device:
     """Device class."""
@@ -74,24 +76,29 @@ class DeviceManager:
     @classmethod
     def from_config(cls, config_file, ifsei):
         """Create Device Manager from config file."""
-        with open(config_file, encoding="utf-8") as file:
-            data = yaml.safe_load(file)
+        try:
+            with open(config_file, encoding="utf-8") as file:
+                data = yaml.safe_load(file)
 
-        lights = []
-        for light_data in data["lights"]:
-            addresses = light_data.get("address", [])
-            for address in addresses:
-                address["state"] = 0
-            light = Light(
-                unique_id=light_data["id"],
-                name=f"{light_data["name"]} - {light_data["zone"]}",
-                zone=light_data["zone"],
-                is_rgb=light_data["isRGB"],
-                address=addresses,
-            )
-            lights.append(light)
+            device_config_schema(data)
 
-        return cls(lights, ifsei)
+            lights = []
+            for light_data in data["lights"]:
+                addresses = light_data.get("address", [])
+                for address in addresses:
+                    address["state"] = 0
+                light = Light(
+                    unique_id=light_data["id"],
+                    name=f"{light_data["name"]} - {light_data["zone"]}",
+                    zone=light_data["zone"],
+                    is_rgb=light_data["isRGB"],
+                    address=addresses,
+                )
+                lights.append(light)
+
+            return cls(lights, ifsei)
+        except FileNotFoundError:
+            return None
 
     def get_devices_by_type(self, device_type: str):
         """Get devices by type."""
@@ -137,7 +144,7 @@ class DeviceManager:
         """Update device state."""
         for device in self._lights:
             if device.get_device_id() == device_id:
-                await self._ifsei.set_zone_intensity(
+                await self._ifsei.async_set_zone_intensity(
                     device.get_address()[0]["module"],
                     device.get_address()[0]["channel"],
                     value,
@@ -145,7 +152,7 @@ class DeviceManager:
 
                 return
 
-    def notify(self, **kwargs):
+    def notify_subscriber(self, **kwargs):
         """Notify change."""
         for device in self._lights:
             if device.callback_ is not None:

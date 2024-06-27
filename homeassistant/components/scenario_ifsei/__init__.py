@@ -29,6 +29,7 @@ _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_PORT = 28000
 DEFAULT_IP = "192.168.15.22"
+YAML_DEVICES = "device_config.yaml"
 
 CONFIG_SCHEMA = vol.Schema(
     {
@@ -61,15 +62,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     ifsei = IFSEI(network_config=network_configuration)
 
     try:
+        await hass.async_add_executor_job(ifsei.load_devices)
+        if ifsei.device_manager is None:
+            return False
+    except vol.Invalid as err:
+        _LOGGER.error("Configuration error in %s: %s", YAML_DEVICES, str(err))
+        return False
+
+    try:
         _LOGGER.debug("Trying to connect to ifsei")
-        await ifsei.connect()
+        await ifsei.async_connect()
     except (ConnectionRefusedError, TimeoutError) as e:
         raise ConfigEntryNotReady(  # noqa: B904
             f"Timed out while trying to connect to {host}, error {e}"
         )
-    # except:
-    #     _LOGGER.debug("Connect error")
-    #     raise ConfigEntryNotReady("Device not ready")  # noqa: B904
 
     _LOGGER.debug(f"Connected to host: {host}:{port}, protocol: {protocol}")  # noqa: G004
 
@@ -85,12 +91,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     async def on_hass_stop(event: Event) -> None:
         """Stop push updates when hass stops."""
-        await ifsei.close()
+        await ifsei.async_close()
 
     entry.async_on_unload(
         hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, on_hass_stop)
     )
-    entry.async_on_unload(ifsei.close)
+    entry.async_on_unload(ifsei.async_close)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
