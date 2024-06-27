@@ -58,11 +58,6 @@ class ScenarioLight(ScenarioUpdatableEntity, LightEntity):
             self._attr_color_mode = ColorMode.RGBW
             self._attr_supported_color_modes = {ColorMode.RGBW}
 
-    # @property
-    # def color_mode(self) -> ColorMode:
-    #     """Return the color mode."""
-    #     return ColorMode(self._attr_color_mode)
-
     @property
     def is_on(self) -> bool:
         """Return whether this light is on or off."""
@@ -114,7 +109,7 @@ class ScenarioLight(ScenarioUpdatableEntity, LightEntity):
     def async_update_callback(self, **kwargs: Any):
         """Update callback."""
 
-        brightness = kwargs.pop("brightness", None)
+        brightness = kwargs.pop(ATTR_BRIGHTNESS, None)
         available = kwargs.pop("available", None)
 
         if available is not None:

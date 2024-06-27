@@ -127,7 +127,7 @@ class IFSEI:
                 self.network_config.tcp_port,
                 client_factory=self._create_client,
             )
-        except Exception as e:
+        except (ConnectionRefusedError, TimeoutError) as e:
             logger.error(
                 "Failed to connect to %s:%s: %s.",
                 self.network_config.host,

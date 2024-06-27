@@ -145,6 +145,7 @@ class ScenarioUpdatableEntity(Entity):
             manufacturer=MANUFACTURER,
             name=self._attr_name,
             via_device=(DOMAIN, str(self._device_id)),
+            suggested_area=device.zone,
         )
         self._attr_device_info = info
 
