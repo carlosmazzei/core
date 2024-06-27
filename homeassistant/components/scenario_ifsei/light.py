@@ -49,16 +49,19 @@ class ScenarioLight(ScenarioUpdatableEntity, LightEntity):
         if not light.get_is_rgb():
             for address in addresses:
                 if address["isDimmeable"]:
+                    self._attr_color_mode = ColorMode.BRIGHTNESS
                     self._attr_supported_color_modes = {ColorMode.BRIGHTNESS}
                 else:
+                    self._attr_color_mode = ColorMode.ONOFF
                     self._attr_supported_color_modes = {ColorMode.ONOFF}
         else:
+            self._attr_color_mode = ColorMode.RGBW
             self._attr_supported_color_modes = {ColorMode.RGBW}
 
-    @property
-    def color_mode(self) -> ColorMode:
-        """Return the color mode."""
-        return ColorMode.ONOFF
+    # @property
+    # def color_mode(self) -> ColorMode:
+    #     """Return the color mode."""
+    #     return ColorMode(self._attr_color_mode)
 
     @property
     def is_on(self) -> bool:
@@ -81,23 +84,16 @@ class ScenarioLight(ScenarioUpdatableEntity, LightEntity):
         if brightness is not None:
             brightness = to_scenario_level(brightness)
 
-        # await self._smartbridge.set_value(
-        #     self.device_id, value=brightness, color_value=color_value, **args
-        # )
-        await self._ifsei.device_manager.update_device_state(
-            self._device.get_device_id(), brightness
-        )
+        if self._ifsei.device_manager is not None:
+            await self._ifsei.device_manager.update_device_state(
+                self._device.get_device_id(), brightness
+            )
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the light on."""
-        # first check for "white mode" (WarmDim)
-        # if (white_color := kwargs.get(ATTR_WHITE)) is not None:
-        #     await self._async_set_warm_dim(white_color)
-        #     return
 
         brightness = kwargs.pop(ATTR_BRIGHTNESS, None)
 
-        # if user is pressing on button nothing is set, so set brightness to 255
         if brightness is None:
             brightness = 255
 
