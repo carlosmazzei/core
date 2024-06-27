@@ -13,10 +13,10 @@ class Device:
 
     def __init__(self) -> None:
         """Device class."""
-        self._unique_id: int = -1
-        self._name: str = ""
-        self._zone: int = -1
-        self._address: dict[str, Any] = {}
+        self.unique_id: int = -1
+        self.name: str = ""
+        self.zone: str = ""
+        self.address: dict[str, Any] = {}
         self.callback_: Callable[[], None] | None = None
         self.state = 0
 
@@ -26,15 +26,15 @@ class Device:
 
     def get_device_id(self):
         """Return unique id."""
-        return self._unique_id
+        return self.unique_id
 
     def get_name(self):
         """Return name."""
-        return self._name
+        return self.name
 
     def get_address(self):
         """Return address."""
-        return self._address
+        return self.address
 
     def add_subscriber(self, callback_: Callable[[], None]):
         """Set a callback function to be called when a response is received."""
@@ -49,28 +49,29 @@ class Light(Device):
     """Light class."""
 
     def __init__(
-        self, unique_id: int, name: str, zone: int, is_rgb: bool, address
+        self, unique_id: int, name: str, zone: str, is_rgb: bool, address
     ) -> None:
         """Init light class."""
 
         super().__init__()
-        self._unique_id = unique_id
-        self._name = name
-        self._zone = zone
-        self._is_rgb = is_rgb
-        self._address = address
+        self.unique_id = unique_id
+        self.name = name
+        self.zone = zone
+        self.is_rgb = is_rgb
+        self.address = address
 
     def get_is_rgb(self):
         """Return if the light is RGB."""
-        return self._is_rgb
+        return self.is_rgb
 
 
 class DeviceManager:
     """Device Manager."""
 
-    def __init__(self, lights, ifsei) -> None:
+    def __init__(self, lights, zones, ifsei) -> None:
         """Device Manager."""
         self._lights = lights
+        self._zones = zones
         self._ifsei = ifsei
 
     @classmethod
@@ -82,6 +83,9 @@ class DeviceManager:
 
             device_config_schema(data)
 
+            zones_list = data.get("zones", [])
+            zones = {zone["id"]: zone["name"] for zone in zones_list}
+
             lights = []
             for light_data in data["lights"]:
                 addresses = light_data.get("address", [])
@@ -89,14 +93,14 @@ class DeviceManager:
                     address["state"] = 0
                 light = Light(
                     unique_id=light_data["id"],
-                    name=f"{light_data["name"]} - {light_data["zone"]}",
-                    zone=light_data["zone"],
+                    name=f"{light_data["name"]}",
+                    zone=zones[light_data["zone"]],
                     is_rgb=light_data["isRGB"],
                     address=addresses,
                 )
                 lights.append(light)
 
-            return cls(lights, ifsei)
+            return cls(lights, zones, ifsei)
         except FileNotFoundError:
             return None
 

@@ -9,17 +9,25 @@ from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_HOST, CONF_PORT, CONF_PROTOCOL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import selector
 
 from .const import CONF_CONTROLLER_UNIQUE_ID, DOMAIN
 from .ifsei.ifsei import IFSEI, NetworkConfiguration, Protocol
 
 _LOGGER = logging.getLogger(__name__)
 
+PROTOCOLS = [
+    selector.SelectOptionDict(value="TCP", label="TCP"),
+    selector.SelectOptionDict(value="UDP", label="UDP"),
+]
+
 DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_HOST): str,
         vol.Required(CONF_PORT): str,
-        vol.Required(CONF_PROTOCOL, default="TCP"): vol.Any("TCP", "UDP"),
+        vol.Required(CONF_PROTOCOL): selector.SelectSelector(
+            selector.SelectSelectorConfig(options=PROTOCOLS),
+        ),
     }
 )
 
@@ -43,7 +51,12 @@ class ScenarioValidator:
         """Connect to IFSEI interface."""
         try:
             await self.ifsei.async_connect()
-        except TimeoutError as e:
+        except (
+            TimeoutError,
+            ConnectionRefusedError,
+            ConnectionAbortedError,
+            ConnectionError,
+        ) as e:
             _LOGGER.debug(f"Failed to connect to controller, error: {e}")  # noqa: G004
             return False
         else:
