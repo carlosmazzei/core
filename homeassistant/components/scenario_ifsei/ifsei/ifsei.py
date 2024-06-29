@@ -28,6 +28,7 @@ class Protocol(Enum):
 RESPONSE_TERMINATOR = ">"
 BUFFER_SIZE = 1024
 RETRY_DELAY = 5  # Delay in seconds before retrying connection
+IFSEI_ATTR_SEND_DELAY = 0.1  # Delay in seconds between messages
 
 ERROR_CODES = {
     "E1": "Buffer overflow on input. Too many characters were sent without sending the <CR> character.",
@@ -122,6 +123,11 @@ class IFSEI:
                 self.network_config.host,
                 self.network_config.tcp_port,
             )
+
+            if self.is_connected and self.connection is not None:
+                logger.info("Ifsei already connected")
+                return True
+
             reader, writer = await telnetlib3.open_connection(
                 self.network_config.host,
                 self.network_config.tcp_port,
@@ -213,7 +219,9 @@ class IFSEI:
         logger.info(
             "Zone %s state: %s intensity: %s", module_number, channel, intensity
         )
-        await self.device_manager.handle_state_change(module_number, channel, intensity)
+        await self.device_manager.async_handle_state_change(
+            module_number, channel, intensity
+        )
 
     async def _async_handle_error(self, response):
         """Handle an error response from the IFSEI device."""
@@ -230,7 +238,7 @@ class IFSEI:
 
     def get_device_id(self):
         """Get device unique id."""
-        return "ifsei-scenario"
+        return f"ifsei-scenario-{self.network_config.host}"
 
     def set_is_connected(self, is_available: bool = False):
         """Set connection status."""
@@ -395,6 +403,7 @@ class _IFSEITelnetClient(TelnetClient):
                     await self._async_send_command_tcp(command)
                 elif self.connection.network_config.protocol == Protocol.UDP:
                     self._send_command_udp(command)
+                await asyncio.sleep(IFSEI_ATTR_SEND_DELAY)
         except asyncio.CancelledError:
             logger.info("Send task cancelled")
 
@@ -475,7 +484,6 @@ class _IFSEITelnetClient(TelnetClient):
         try:
             self._stop_tasks()
             self.writer.close()
-            await self.writer.wait_closed()
             logger.info("Disconnected from ifsei")
         except Exception as e:
             logger.error("Failed to disconnect: %s", e)
