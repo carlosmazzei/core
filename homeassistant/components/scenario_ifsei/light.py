@@ -40,6 +40,14 @@ def to_hass_level(level):
     return int((level * 255) // 100)
 
 
+# Function to update an element in the tuple
+def update_tuple(tpl, index, value):
+    """Update tuple with new value."""
+    temp_list = list(tpl)
+    temp_list[index] = value
+    return tuple(temp_list)
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
