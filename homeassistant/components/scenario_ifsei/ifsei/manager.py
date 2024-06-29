@@ -130,29 +130,43 @@ class DeviceManager:
             if device.unique_id == id:
                 return device
 
-    async def handle_state_change(self, module_number, channel, state):
+    async def async_handle_state_change(self, module_number, channel, state):
         """Update device intensity."""
         for light in self._lights:
-            if (
-                light.get_address()[0]["module"] == module_number
-                and light.get_address()[0]["channel"] == channel
-            ):
-                light.get_address()[0]["state"] = state
+            for address in light.address:
+                if address["module"] == module_number and address["channel"] == channel:
+                    address["state"] = state
+                    address_name = address["name"]
 
-                if light.callback_ is not None:
-                    light.callback_(brightness=state)
+                    if light.callback_ is not None:
+                        kwargs = {address_name: state}
+                        light.callback_(**kwargs)
 
-                return
-
-    async def update_device_state(self, device_id, value):
+    async def async_update_device_state(self, device_id, colors: list):
         """Update device state."""
+
+        if len(colors) != 4:
+            raise ValueError("List must have exactly 4 elements")
+
         for device in self._lights:
-            if device.get_device_id() == device_id:
-                await self._ifsei.async_set_zone_intensity(
-                    device.get_address()[0]["module"],
-                    device.get_address()[0]["channel"],
-                    value,
-                )
+            if device.unique_id == device_id:
+                # Propagate changes to every address
+                for address in device.address:
+                    value = 0
+                    if address["name"] == "r":
+                        value = colors[0]
+                    elif address["name"] == "g":
+                        value = colors[1]
+                    elif address["name"] == "b":
+                        value = colors[2]
+                    elif address["name"] == "w":
+                        value = colors[3]
+
+                    await self._ifsei.async_set_zone_intensity(
+                        address["module"],
+                        address["channel"],
+                        value,
+                    )
 
                 return
 
