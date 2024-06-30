@@ -458,36 +458,36 @@ shades:
   - id: 1
     name: Cortina
     zone: 10
-    address1: 0002
-    address2: 0003
-    address3: 0004
+    address1: "0002"
+    address2: "0003"
+    address3: "0004"
   - id: 2
     name: Persiana LD
     zone: 10
-    address1: 0005
-    address2: 0006
-    address3: 0007
+    address1: "0005"
+    address2: "0006"
+    address3: "0007"
   - id: 3
     name: Persiana LE
     zone: 10
-    address1: 0008
-    address2: 0009
-    address3: 0010
+    address1: "0008"
+    address2: "0009"
+    address3: "0010"
   - id: 4
     name: Persiana LD
     zone: 5
-    address1: 0013
-    address2: 0014
-    address3: 0015
+    address1: "0013"
+    address2: "0014"
+    address3: "0015"
   - id: 5
     name: Persiana LE
     zone: 5
-    address1: 0102
-    address2: 0103
-    address3: 0104
+    address1: "0102"
+    address2: "0103"
+    address3: "0104"
   - id: 6
     name: Persiana Lateral
     zone: 5
-    address1: 0105
-    address2: 0106
-    address3: 0107
+    address1: "0105"
+    address2: "0106"
+    address3: "0107"

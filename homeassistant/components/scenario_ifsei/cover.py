@@ -12,7 +12,15 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import ScenarioUpdatableEntity
-from .const import CONTROLLER_ENTRY, COVERS_ENTRY, DOMAIN, IFSEI_ATTR_AVAILABLE
+from .const import (
+    CONTROLLER_ENTRY,
+    COVERS_ENTRY,
+    DOMAIN,
+    IFSEI_ATTR_AVAILABLE,
+    IFSEI_ATTR_COMMAND,
+    IFSEI_COVER_DOWN,
+    IFSEI_COVER_UP,
+)
 from .ifsei.ifsei import IFSEI
 from .ifsei.manager import Cover
 
@@ -43,6 +51,7 @@ class ScenarioCover(ScenarioUpdatableEntity, CoverEntity):
         self.stop = cover.stop
         self.down = cover.down
         self._attr_is_closed = True
+        self._attr_available = ifsei.is_connected
 
     @property
     def is_closed(self) -> bool | None:
@@ -78,15 +87,15 @@ class ScenarioCover(ScenarioUpdatableEntity, CoverEntity):
     def async_update_callback(self, **kwargs: Any):
         """Update callback."""
         available = kwargs.pop(IFSEI_ATTR_AVAILABLE, None)
-        command = kwargs.pop("command", None)
+        command = kwargs.pop(IFSEI_ATTR_COMMAND, None)
 
         if available is not None:
             self._attr_available = available
 
         if command is not None:
-            if command == "down":
+            if command == IFSEI_COVER_DOWN:
                 self._attr_is_closed = True
-            elif command == "up":
+            elif command == IFSEI_COVER_UP:
                 self._attr_is_closed = False
 
         self.async_write_ha_state()

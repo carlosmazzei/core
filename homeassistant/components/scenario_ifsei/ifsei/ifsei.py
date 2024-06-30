@@ -81,6 +81,7 @@ class IFSEI:
         self.process_task: Task | None = None
         self.device_manager: DeviceManager | None = None
         self.is_connected: bool = False
+        self.is_closing: bool = False
         self._reconnect_task: Task | None = None
         self._telnetclient: TelnetClient | None = None
 
@@ -105,7 +106,6 @@ class IFSEI:
 
     def load_devices(self):
         """Load device manager from config file."""
-        # Load device configuration file
         current_module_path = __file__
         absolute_module_path = os.path.abspath(current_module_path)
         current_directory = os.path.dirname(absolute_module_path)
@@ -124,6 +124,10 @@ class IFSEI:
                 self.network_config.host,
                 self.network_config.tcp_port,
             )
+
+            # if self.connection is not None:
+            #     logger.info("Ifsei already connected")
+            #     return True
 
             reader, writer = await telnetlib3.open_connection(
                 self.network_config.host,
@@ -145,6 +149,7 @@ class IFSEI:
 
     async def async_close(self):
         """Close client connection."""
+        self.is_closing = True
         await self._telnetclient.async_close()
 
     def _create_client(self, **kwds):
@@ -157,8 +162,14 @@ class IFSEI:
     def on_connection_lost(self):
         """Lost connection callback."""
         logger.info("Lost connection to ifsei")
+        if self.is_closing:
+            logger.info("Closing, do not start reconnect thread")
+            return
+
         if self._reconnect_task is None:
+            self.connection = None
             self._reconnect_task = asyncio.create_task(self._async_reconnect())
+
         self.set_is_connected(False)
 
     async def _async_reconnect(self):
@@ -226,7 +237,7 @@ class IFSEI:
     async def _async_handle_scene_response(self, response):
         """Handle a scene response from the IFSEI device."""
         # Scene status: *C{address:4}1
-        address = int(response[2:6])
+        address = str(response[2:6])
         logger.info("Scene address %s", address)
         await self.device_manager.async_handle_scene_state_change(address)
 
@@ -330,13 +341,13 @@ class IFSEI:
         """Decrease scene intensity."""
         return await self.async_send_command(f"$D{module_address:02}C-")
 
-    # async def async_increase_zone_intensity(self, module_address, zone_number):
-    #     """Increase zone intensity."""
-    #     return await self.send_command(f"$D{module_address:02}Z{zone_number}+")
+    async def async_increase_zone_intensity(self, module_address, zone_number):
+        """Increase zone intensity."""
+        return await self.send_command(f"$D{module_address:02}Z{zone_number}+")
 
-    # async def async_decrease_zone_intensity(self, module_address, zone_number):
-    #     """Decrease zone intensity."""
-    #     return await self.send_command(f"$D{module_address:02}Z{zone_number}-")
+    async def async_decrease_zone_intensity(self, module_address, zone_number):
+        """Decrease zone intensity."""
+        return await self.send_command(f"$D{module_address:02}Z{zone_number}-")
 
     # async def async_record_scene(self, module_address):
     #     """Record scene."""
@@ -484,7 +495,7 @@ class _IFSEITelnetClient(TelnetClient):
             raise
 
     def connection_lost(self, exc: None | Exception, /) -> None:
-        # This is called each time when you connection is lost
+        """Call when connection is lost."""
         super().connection_lost(exc)
         self._stop_tasks()
         if self.on_connection_lost_callback is not None:
@@ -495,6 +506,7 @@ class _IFSEITelnetClient(TelnetClient):
         try:
             self._stop_tasks()
             self.writer.close()
+            self.reader.close()
             logger.info("Disconnected from ifsei")
         except Exception as e:
             logger.error("Failed to disconnect: %s", e)

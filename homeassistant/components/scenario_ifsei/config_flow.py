@@ -60,7 +60,23 @@ class ScenarioValidator:
             _LOGGER.debug(f"Failed to connect to controller, error: {e}")  # noqa: G004
             return False
         else:
-            _LOGGER.debug("Connected")
+            _LOGGER.debug("Connected to ifsei from config flow")
+            return True
+
+    async def disconnect_from_ifsei(self) -> bool:
+        """Disconnect to IFSEI interface."""
+        try:
+            await self.ifsei.async_close()
+        except (
+            TimeoutError,
+            ConnectionRefusedError,
+            ConnectionAbortedError,
+            ConnectionError,
+        ) as e:
+            _LOGGER.debug(f"Failed to connect to controller, error: {e}")  # noqa: G004
+            return False
+        else:
+            _LOGGER.debug("Connected to ifsei from config flow")
             return True
 
 
@@ -91,11 +107,12 @@ class ScenarioConfigFlow(ConfigFlow, domain=DOMAIN):
             except CannotConnect:
                 errors["base"] = "cannot_connect"
 
+            await (
+                scenario.disconnect_from_ifsei()
+            )  # Make sure there are no two clients after config
+
             if not errors:
                 controller_unique_id = scenario.ifsei.get_device_id()
-                # mac = (controller_unique_id.split("_", 3))[2]
-                # formatted_mac = format_mac(mac)
-                # await self.async_set_unique_id(formatted_mac)
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(
                     title=controller_unique_id,

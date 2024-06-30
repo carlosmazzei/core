@@ -57,6 +57,7 @@ class ScenarioLight(ScenarioUpdatableEntity, LightEntity):
     def __init__(self, light: Light, ifsei: IFSEI) -> None:
         """Initialize a scenario light."""
         super().__init__(light, ifsei)
+        self._attr_available = ifsei.is_connected
 
         addresses = light.get_address()
 

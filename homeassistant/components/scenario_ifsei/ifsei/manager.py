@@ -112,7 +112,7 @@ class DeviceManager:
                     address["state"] = 0
                 light = Light(
                     unique_id=light_data["id"],
-                    name=f"{light_data["name"]}",
+                    name=light_data["name"],
                     zone=zones[light_data["zone"]],
                     is_rgb=light_data["isRGB"],
                     address=addresses,
@@ -123,11 +123,11 @@ class DeviceManager:
             for covers_data in data["shades"]:
                 cover = Cover(
                     unique_id=covers_data["id"],
-                    name=f"{covers_data["name"]}",
+                    name=covers_data["name"],
                     zone=zones[covers_data["zone"]],
-                    up=covers_data["address1"],
-                    stop=covers_data["address2"],
-                    down=covers_data["address3"],
+                    up=str(covers_data["address1"]),
+                    stop=str(covers_data["address2"]),
+                    down=str(covers_data["address3"]),
                 )
                 covers.append(cover)
 
@@ -205,8 +205,9 @@ class DeviceManager:
 
                 return
 
-    async def async_handle_scene_state_change(self, change_address):
+    async def async_handle_scene_state_change(self, change_address: str):
         """Update scene."""
+        kwargs = {}
         for cover in self._covers:
             if change_address == cover.up:
                 kwargs = {"command": "up"}
