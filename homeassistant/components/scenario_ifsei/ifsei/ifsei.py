@@ -29,6 +29,7 @@ RESPONSE_TERMINATOR = ">"
 BUFFER_SIZE = 1024
 RETRY_DELAY = 5  # Delay in seconds before retrying connection
 IFSEI_ATTR_SEND_DELAY = 0.1  # Delay in seconds between messages
+DEVICE_FILE = "device_config.yaml"
 
 ERROR_CODES = {
     "E1": "Buffer overflow on input. Too many characters were sent without sending the <CR> character.",
@@ -108,7 +109,7 @@ class IFSEI:
         current_module_path = __file__
         absolute_module_path = os.path.abspath(current_module_path)
         current_directory = os.path.dirname(absolute_module_path)
-        target_file_name = "device_config.yaml"
+        target_file_name = DEVICE_FILE
         target_file_path = os.path.join(current_directory, target_file_name)
 
         self.device_manager = DeviceManager.from_config(target_file_path, self)
@@ -123,10 +124,6 @@ class IFSEI:
                 self.network_config.host,
                 self.network_config.tcp_port,
             )
-
-            if self.is_connected and self.connection is not None:
-                logger.info("Ifsei already connected")
-                return True
 
             reader, writer = await telnetlib3.open_connection(
                 self.network_config.host,
@@ -207,6 +204,9 @@ class IFSEI:
         elif response.startswith("*Z"):
             await self._async_handle_zone_response(response)
 
+        elif response.startswith("*C"):
+            await self._async_handle_scene_response(response)
+
         if response.startswith("E"):
             await self._async_handle_error(response)
 
@@ -219,9 +219,16 @@ class IFSEI:
         logger.info(
             "Zone %s state: %s intensity: %s", module_number, channel, intensity
         )
-        await self.device_manager.async_handle_state_change(
+        await self.device_manager.async_handle_light_state_change(
             module_number, channel, intensity
         )
+
+    async def _async_handle_scene_response(self, response):
+        """Handle a scene response from the IFSEI device."""
+        # Scene status: *C{address:4}1
+        address = int(response[2:6])
+        logger.info("Scene address %s", address)
+        await self.device_manager.async_handle_scene_state_change(address)
 
     async def _async_handle_error(self, response):
         """Handle an error response from the IFSEI device."""
@@ -306,6 +313,10 @@ class IFSEI:
         return await self.async_send_command(
             f"Z{module_address:02}{channel:01}L{intensity:03}T1"
         )
+
+    async def async_set_shader_state(self, module_address: str):
+        """Set shader state."""
+        return await self.async_send_command(f"C{module_address:04}1")
 
     async def async_get_zone_intensity(self, module_address, zone_number):
         """Get zone intensity."""

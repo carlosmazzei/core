@@ -13,7 +13,7 @@ class Device:
 
     def __init__(self) -> None:
         """Device class."""
-        self.unique_id: int = -1
+        self.unique_id: str = ""
         self.name: str = ""
         self.zone: str = ""
         self.address: dict[str, Any] = {}
@@ -49,12 +49,12 @@ class Light(Device):
     """Light class."""
 
     def __init__(
-        self, unique_id: int, name: str, zone: str, is_rgb: bool, address
+        self, unique_id: str, name: str, zone: str, is_rgb: bool, address
     ) -> None:
         """Init light class."""
 
         super().__init__()
-        self.unique_id = unique_id
+        self.unique_id = str(f"{unique_id}-light")
         self.name = name
         self.zone = zone
         self.is_rgb = is_rgb
@@ -65,12 +65,31 @@ class Light(Device):
         return self.is_rgb
 
 
+class Cover(Device):
+    """Cover class."""
+
+    def __init__(
+        self, unique_id: str, name: str, zone: str, up: str, stop: str, down: str
+    ) -> None:
+        """Init light class."""
+
+        super().__init__()
+        self.unique_id = str(f"{unique_id}-cover")
+        self.name = name
+        self.zone = zone
+        self.up = up
+        self.stop = stop
+        self.down = down
+        self.is_closed = False
+
+
 class DeviceManager:
     """Device Manager."""
 
-    def __init__(self, lights, zones, ifsei) -> None:
+    def __init__(self, lights, covers, zones, ifsei) -> None:
         """Device Manager."""
         self._lights = lights
+        self._covers = covers
         self._zones = zones
         self._ifsei = ifsei
 
@@ -100,7 +119,19 @@ class DeviceManager:
                 )
                 lights.append(light)
 
-            return cls(lights, zones, ifsei)
+            covers = []
+            for covers_data in data["shades"]:
+                cover = Cover(
+                    unique_id=covers_data["id"],
+                    name=f"{covers_data["name"]}",
+                    zone=zones[covers_data["zone"]],
+                    up=covers_data["address1"],
+                    stop=covers_data["address2"],
+                    down=covers_data["address3"],
+                )
+                covers.append(cover)
+
+            return cls(lights, covers, zones, ifsei)
         except FileNotFoundError:
             return None
 
@@ -108,6 +139,10 @@ class DeviceManager:
         """Get devices by type."""
         if device_type == "light":
             return self._lights
+
+        if device_type == "covers":
+            return self._covers
+
         return None
 
     # def get_device_by_name(self, name: str):
@@ -130,7 +165,7 @@ class DeviceManager:
             if device.unique_id == id:
                 return device
 
-    async def async_handle_state_change(self, module_number, channel, state):
+    async def async_handle_light_state_change(self, module_number, channel, state):
         """Update device intensity."""
         for light in self._lights:
             for address in light.address:
@@ -142,8 +177,8 @@ class DeviceManager:
                         kwargs = {address_name: state}
                         light.callback_(**kwargs)
 
-    async def async_update_device_state(self, device_id, colors: list):
-        """Update device state."""
+    async def async_update_light_state(self, device_id, colors: list):
+        """Update light state."""
 
         if len(colors) != 4:
             raise ValueError("List must have exactly 4 elements")
@@ -170,8 +205,31 @@ class DeviceManager:
 
                 return
 
+    async def async_handle_scene_state_change(self, change_address):
+        """Update scene."""
+        for cover in self._covers:
+            if change_address == cover.up:
+                kwargs = {"command": "up"}
+            elif change_address == cover.down:
+                kwargs = {"command": "down"}
+            elif change_address == cover.stop:
+                kwargs = {"command": "stop"}
+
+            if cover.callback_ is not None:
+                cover.callback_(**kwargs)
+
+    async def async_update_cover_state(self, device_id, address: str):
+        """Update cover state."""
+        for device in self._covers:
+            if device.unique_id == device_id:
+                await self._ifsei.async_set_shader_state(address)
+
     def notify_subscriber(self, **kwargs):
         """Notify change."""
         for device in self._lights:
+            if device.callback_ is not None:
+                device.callback_(**kwargs)
+
+        for device in self._covers:
             if device.callback_ is not None:
                 device.callback_(**kwargs)

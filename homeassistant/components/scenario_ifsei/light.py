@@ -40,14 +40,6 @@ def to_hass_level(level):
     return int((level * 255) // 100)
 
 
-# Function to update an element in the tuple
-def update_tuple(tpl, index, value):
-    """Update tuple with new value."""
-    temp_list = list(tpl)
-    temp_list[index] = value
-    return tuple(temp_list)
-
-
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
@@ -115,8 +107,8 @@ class ScenarioLight(ScenarioUpdatableEntity, LightEntity):
         scaled_colors[3] = brightness if brightness is not None else 0
 
         if self._ifsei.device_manager is not None:
-            await self._ifsei.device_manager.async_update_device_state(
-                self._device.unique_id, scaled_colors
+            await self._ifsei.device_manager.async_update_light_state(
+                self._attr_unique_id, scaled_colors
             )
 
     async def async_turn_on(self, **kwargs: Any) -> None:

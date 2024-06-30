@@ -21,7 +21,7 @@ import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import Entity
 
-from .const import CONTROLLER_ENTRY, DOMAIN, LIGHTS_ENTRY, MANUFACTURER
+from .const import CONTROLLER_ENTRY, COVERS_ENTRY, DOMAIN, LIGHTS_ENTRY, MANUFACTURER
 from .ifsei.ifsei import IFSEI, NetworkConfiguration, Protocol
 from .ifsei.manager import Device
 
@@ -47,7 +47,7 @@ CONFIG_SCHEMA = vol.Schema(
     extra=vol.ALLOW_EXTRA,
 )
 
-PLATFORMS: list[Platform] = [Platform.LIGHT]
+PLATFORMS: list[Platform] = [Platform.COVER, Platform.LIGHT]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -88,6 +88,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry_data = hass.data[DOMAIN].setdefault(entry.entry_id, {})
     entry_data[CONTROLLER_ENTRY] = ifsei
     entry_data[LIGHTS_ENTRY] = ifsei.device_manager.get_devices_by_type("light")
+    entry_data[COVERS_ENTRY] = ifsei.device_manager.get_devices_by_type("covers")
 
     async def on_hass_stop(event: Event) -> None:
         """Stop push updates when hass stops."""
@@ -115,7 +116,7 @@ def _async_register_scenario_device(
         identifiers={(DOMAIN, ifsei.get_device_id())},
         model="IFSEI Classic",
         via_device=(DOMAIN, ifsei.get_device_id()),
-        configuration_url="https://scenario.com.br",
+        configuration_url="https://scenario.ind.br",
     )
 
     device_registry.async_get_or_create(**device_args, config_entry_id=config_entry_id)
@@ -135,16 +136,16 @@ class ScenarioUpdatableEntity(Entity):
         """Initialize a Scenario entity."""
         self._ifsei = ifsei
         self._device = device
-        self._attr_name = device.get_name()
-        self._attr_unique_id = str(device.get_device_id())
+        self._attr_name = device.name
+        self._attr_unique_id = device.unique_id
         self._device_name = ifsei.name
         self._device_manufacturer = MANUFACTURER
         self._device_id = ifsei.get_device_id()
         info = DeviceInfo(
-            identifiers={(DOMAIN, self._attr_unique_id)},
+            identifiers={(DOMAIN, str(device.unique_id))},
             manufacturer=MANUFACTURER,
             name=self._attr_name,
-            via_device=(DOMAIN, str(self._device_id)),
+            via_device=(DOMAIN, str(device.unique_id)),
             suggested_area=device.zone,
         )
         self._attr_device_info = info
