@@ -105,8 +105,10 @@ class ScenarioCover(ScenarioUpdatableEntity, CoverEntity):
             if command == IFSEI_COVER_DOWN:
                 self._attr_is_closed = True
                 self._attr_is_closing = False
+                self._attr_is_opening = False
             elif command == IFSEI_COVER_UP:
                 self._attr_is_closed = False
+                self._attr_is_closing = False
                 self._attr_is_opening = False
 
         self.async_write_ha_state()
