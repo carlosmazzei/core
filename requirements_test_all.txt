@@ -456,6 +456,9 @@ asyncarve==0.1.1
 # homeassistant.components.scenario_ifsei
 asyncio==3.4.3
 
+# homeassistant.components.scenario_ifsei
+asyncio==3.4.3
+
 # homeassistant.components.sleepiq
 asyncsleepiq==1.5.2
 
