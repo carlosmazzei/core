@@ -209,15 +209,16 @@ class DeviceManager:
         """Update scene."""
         kwargs = {}
         for cover in self._covers:
-            if change_address == cover.up:
-                kwargs = {"command": "up"}
-            elif change_address == cover.down:
-                kwargs = {"command": "down"}
-            elif change_address == cover.stop:
-                kwargs = {"command": "stop"}
+            if change_address in [cover.up, cover.down, cover.stop]:
+                if change_address == cover.up:
+                    kwargs = {"command": "up"}
+                elif change_address == cover.down:
+                    kwargs = {"command": "down"}
+                elif change_address == cover.stop:
+                    kwargs = {"command": "stop"}
 
-            if cover.callback_ is not None:
-                cover.callback_(**kwargs)
+                if cover.callback_ is not None:
+                    cover.callback_(**kwargs)
 
     async def async_update_cover_state(self, device_id, address: str):
         """Update cover state."""

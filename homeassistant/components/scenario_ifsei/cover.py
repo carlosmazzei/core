@@ -67,18 +67,27 @@ class ScenarioCover(ScenarioUpdatableEntity, CoverEntity):
         await self._ifsei.device_manager.async_update_cover_state(
             self.unique_id, self.up
         )
+        self._attr_is_opening = True
+        self._attr_is_closing = False
+        self.async_write_ha_state()
 
     async def async_close_cover(self, **kwargs):
         """Close the cover."""
         await self._ifsei.device_manager.async_update_cover_state(
             self.unique_id, self.down
         )
+        self._attr_is_opening = False
+        self._attr_is_closing = True
+        self.async_write_ha_state()
 
     async def async_stop_cover(self, **kwargs):
         """Stop the cover."""
         await self._ifsei.device_manager.async_update_cover_state(
             self.unique_id, self.stop
         )
+        self._attr_is_closing = False
+        self._attr_is_opening = False
+        self.async_write_ha_state()
 
     async def async_will_remove_from_hass(self):
         """Remove callbacks."""
@@ -95,7 +104,9 @@ class ScenarioCover(ScenarioUpdatableEntity, CoverEntity):
         if command is not None:
             if command == IFSEI_COVER_DOWN:
                 self._attr_is_closed = True
+                self._attr_is_closing = False
             elif command == IFSEI_COVER_UP:
                 self._attr_is_closed = False
+                self._attr_is_opening = False
 
         self.async_write_ha_state()
