@@ -137,7 +137,7 @@ class DeviceManager:
 
     def get_devices_by_type(self, device_type: str):
         """Get devices by type."""
-        if device_type == "light":
+        if device_type == "lights":
             return self._lights
 
         if device_type == "covers":

@@ -12,10 +12,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import ScenarioUpdatableEntity
-from .const import (
-    CONTROLLER_ENTRY,
-    COVERS_ENTRY,
-    DOMAIN,
+from .const import CONTROLLER_ENTRY, COVERS_ENTRY, DOMAIN
+from .ifsei.const import (
     IFSEI_ATTR_AVAILABLE,
     IFSEI_ATTR_COMMAND,
     IFSEI_COVER_DOWN,

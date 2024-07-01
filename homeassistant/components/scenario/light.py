@@ -14,15 +14,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import ScenarioUpdatableEntity
-from .const import (
-    CONTROLLER_ENTRY,
-    DOMAIN,
+from .const import CONTROLLER_ENTRY, DOMAIN, LIGHTS_ENTRY
+from .ifsei.const import (
     IFSEI_ATTR_AVAILABLE,
     IFSEI_ATTR_BLUE,
     IFSEI_ATTR_BRIGHTNESS,
     IFSEI_ATTR_GREEN,
     IFSEI_ATTR_RED,
-    LIGHTS_ENTRY,
 )
 from .ifsei.ifsei import IFSEI
 from .ifsei.manager import Light

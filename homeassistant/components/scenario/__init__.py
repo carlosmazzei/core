@@ -21,15 +21,20 @@ import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import Entity
 
-from .const import CONTROLLER_ENTRY, COVERS_ENTRY, DOMAIN, LIGHTS_ENTRY, MANUFACTURER
+from .const import (
+    CONTROLLER_ENTRY,
+    COVERS_ENTRY,
+    DOMAIN,
+    LIGHTS_ENTRY,
+    MANUFACTURER,
+    YAML_DEVICES,
+)
+from .ifsei.const import COVER_DEVICES, LIGHT_DEVICES
 from .ifsei.ifsei import IFSEI, NetworkConfiguration, Protocol
 from .ifsei.manager import Device
 
 _LOGGER = logging.getLogger(__name__)
 
-DEFAULT_PORT = 28000
-DEFAULT_IP = "192.168.15.22"
-YAML_DEVICES = "device_config.yaml"
 
 CONFIG_SCHEMA = vol.Schema(
     {
@@ -87,8 +92,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     entry_data = hass.data[DOMAIN].setdefault(entry.entry_id, {})
     entry_data[CONTROLLER_ENTRY] = ifsei
-    entry_data[LIGHTS_ENTRY] = ifsei.device_manager.get_devices_by_type("light")
-    entry_data[COVERS_ENTRY] = ifsei.device_manager.get_devices_by_type("covers")
+    entry_data[LIGHTS_ENTRY] = ifsei.device_manager.get_devices_by_type(LIGHT_DEVICES)
+    entry_data[COVERS_ENTRY] = ifsei.device_manager.get_devices_by_type(COVER_DEVICES)
 
     async def on_hass_stop(event: Event) -> None:
         """Stop push updates when hass stops."""
