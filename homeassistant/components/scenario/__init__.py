@@ -99,15 +99,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     entry.async_on_unload(ifsei.async_close)
 
-    async def on_hass_stop(event: Event) -> None:
-        """Stop push updates when hass stops."""
-        await ifsei.async_close()
-
-    entry.async_on_unload(
-        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, on_hass_stop)
-    )
-    entry.async_on_unload(ifsei.async_close)
-
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True

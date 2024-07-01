@@ -150,7 +150,8 @@ class IFSEI:
     async def async_close(self):
         """Close client connection."""
         self.is_closing = True
-        await self._telnetclient.async_close()
+        if self._telnetclient is not None:
+            await self._telnetclient.async_close()
 
     def _create_client(self, **kwds):
         """Create a telnet client using the factory."""
