@@ -54,7 +54,7 @@ class Light(Device):
         """Init light class."""
 
         super().__init__()
-        self.unique_id = str(f"{unique_id}-light")
+        self.unique_id = str(f"{unique_id}_{zone.lower().replace(" ","_")}")
         self.name = name
         self.zone = zone
         self.is_rgb = is_rgb
@@ -74,7 +74,7 @@ class Cover(Device):
         """Init light class."""
 
         super().__init__()
-        self.unique_id = str(f"{unique_id}-cover")
+        self.unique_id = str(f"{unique_id}_{zone.lower().replace(" ","_")}")
         self.name = name
         self.zone = zone
         self.up = up

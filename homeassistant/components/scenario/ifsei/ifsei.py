@@ -28,7 +28,7 @@ class Protocol(Enum):
 RESPONSE_TERMINATOR = ">"
 BUFFER_SIZE = 1024
 RETRY_DELAY = 5  # Delay in seconds before retrying connection
-IFSEI_ATTR_SEND_DELAY = 0.1  # Delay in seconds between messages
+IFSEI_ATTR_SEND_DELAY = 0.2  # Delay in seconds between messages
 DEVICE_FILE = "device_config.yaml"
 
 ERROR_CODES = {
@@ -125,9 +125,9 @@ class IFSEI:
                 self.network_config.tcp_port,
             )
 
-            # if self.connection is not None:
-            #     logger.info("Ifsei already connected")
-            #     return True
+            if self.connection is not None:
+                logger.info("Ifsei already connected")
+                return True
 
             reader, writer = await telnetlib3.open_connection(
                 self.network_config.host,
@@ -170,8 +170,7 @@ class IFSEI:
         if self._reconnect_task is None:
             self.connection = None
             self._reconnect_task = asyncio.create_task(self._async_reconnect())
-
-        self.set_is_connected(False)
+            self.set_is_connected(False)
 
     async def _async_reconnect(self):
         """Reconnect when connection is lost."""
@@ -263,6 +262,7 @@ class IFSEI:
         """Set connection status."""
         self.is_connected = is_available
         if self.device_manager is not None:
+            logger.info("Set ifsei availability to: %s", is_available)
             self.device_manager.notify_subscriber(available=is_available)
 
     # Commands for control/configuration
