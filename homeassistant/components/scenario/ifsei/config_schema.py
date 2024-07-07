@@ -2,10 +2,19 @@
 
 from voluptuous import All, Any, Coerce, Length, Optional, Required, Schema
 
+from .const import (
+    IFSEI_ATTR_BLUE,
+    IFSEI_ATTR_BRIGHTNESS,
+    IFSEI_ATTR_GREEN,
+    IFSEI_ATTR_RED,
+)
+
 # Define the schema for address in lights
 address_schema = Schema(
     {
-        Required("name"): Any("r", "g", "b", "w"),
+        Required("name"): Any(
+            IFSEI_ATTR_RED, IFSEI_ATTR_GREEN, IFSEI_ATTR_BLUE, IFSEI_ATTR_BRIGHTNESS
+        ),
         Required("module"): Coerce(int),
         Required("channel"): Coerce(int),
         Required("isDimmeable"): Coerce(bool),

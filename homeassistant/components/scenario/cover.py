@@ -16,7 +16,11 @@ from .const import CONTROLLER_ENTRY, COVERS_ENTRY, DOMAIN
 from .ifsei.const import (
     IFSEI_ATTR_AVAILABLE,
     IFSEI_ATTR_COMMAND,
+    IFSEI_ATTR_SCENE_ACTIVE,
+    IFSEI_ATTR_SCENE_INACTIVE,
+    IFSEI_ATTR_STATE,
     IFSEI_COVER_DOWN,
+    IFSEI_COVER_STOP,
     IFSEI_COVER_UP,
 )
 from .ifsei.ifsei import IFSEI
@@ -50,6 +54,7 @@ class ScenarioCover(ScenarioUpdatableEntity, CoverEntity):
         self.down = cover.down
         self._attr_is_closed = True
         self._attr_available = ifsei.is_connected
+        self.assumed_state = True  # Allow all commands to be enabled (no half-open / half-closed state allowed)
 
     @property
     def is_closed(self) -> bool | None:
@@ -65,27 +70,18 @@ class ScenarioCover(ScenarioUpdatableEntity, CoverEntity):
         await self._ifsei.device_manager.async_update_cover_state(
             self.unique_id, self.up
         )
-        self._attr_is_opening = True
-        self._attr_is_closing = False
-        self.async_write_ha_state()
 
     async def async_close_cover(self, **kwargs):
         """Close the cover."""
         await self._ifsei.device_manager.async_update_cover_state(
             self.unique_id, self.down
         )
-        self._attr_is_opening = False
-        self._attr_is_closing = True
-        self.async_write_ha_state()
 
     async def async_stop_cover(self, **kwargs):
         """Stop the cover."""
         await self._ifsei.device_manager.async_update_cover_state(
             self.unique_id, self.stop
         )
-        self._attr_is_closing = False
-        self._attr_is_opening = False
-        self.async_write_ha_state()
 
     async def async_will_remove_from_hass(self):
         """Remove callbacks."""
@@ -95,18 +91,21 @@ class ScenarioCover(ScenarioUpdatableEntity, CoverEntity):
         """Update callback."""
         available = kwargs.pop(IFSEI_ATTR_AVAILABLE, None)
         command = kwargs.pop(IFSEI_ATTR_COMMAND, None)
+        state = kwargs.pop(IFSEI_ATTR_STATE, None)
 
         if available is not None:
             self._attr_available = available
 
-        if command is not None:
+        if command is not None and state is not None:
             if command == IFSEI_COVER_DOWN:
-                self._attr_is_closed = True
-                self._attr_is_closing = False
-                self._attr_is_opening = False
+                if state == IFSEI_ATTR_SCENE_ACTIVE:
+                    self._attr_is_closed = True
             elif command == IFSEI_COVER_UP:
-                self._attr_is_closed = False
-                self._attr_is_closing = False
-                self._attr_is_opening = False
+                if state == IFSEI_ATTR_SCENE_ACTIVE:
+                    self._attr_is_closed = False
+            elif command == IFSEI_COVER_STOP:
+                if state in (IFSEI_ATTR_SCENE_ACTIVE, IFSEI_ATTR_SCENE_INACTIVE):
+                    self._attr_is_closing = False
+                    self._attr_is_opening = False
 
         self.async_write_ha_state()

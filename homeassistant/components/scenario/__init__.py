@@ -67,8 +67,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     ifsei = IFSEI(network_config=network_configuration)
 
     try:
+        _LOGGER.info("Load devices from file")
         await hass.async_add_executor_job(ifsei.load_devices)
+        _LOGGER.info("Devices loaded")
         if ifsei.device_manager is None:
+            _LOGGER.error("Problem loading devices and creating device manager")
             return False
     except vol.Invalid as err:
         _LOGGER.error("Configuration error in %s: %s", YAML_DEVICES, str(err))

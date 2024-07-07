@@ -6,6 +6,19 @@ from typing import Any
 import yaml
 
 from .config_schema import device_config_schema
+from .const import (
+    COVER_DEVICES,
+    IFSEI_ATTR_BLUE,
+    IFSEI_ATTR_BRIGHTNESS,
+    IFSEI_ATTR_COMMAND,
+    IFSEI_ATTR_GREEN,
+    IFSEI_ATTR_RED,
+    IFSEI_ATTR_STATE,
+    IFSEI_COVER_DOWN,
+    IFSEI_COVER_STOP,
+    IFSEI_COVER_UP,
+    LIGHT_DEVICES,
+)
 
 
 class Device:
@@ -54,7 +67,7 @@ class Light(Device):
         """Init light class."""
 
         super().__init__()
-        self.unique_id = str(f"{unique_id}_{zone.lower().replace(" ","_")}")
+        self.unique_id = str(f"{unique_id}_{zone}").lower().replace(" ", "_")
         self.name = name
         self.zone = zone
         self.is_rgb = is_rgb
@@ -74,7 +87,7 @@ class Cover(Device):
         """Init light class."""
 
         super().__init__()
-        self.unique_id = str(f"{unique_id}_{zone.lower().replace(" ","_")}")
+        self.unique_id = str(f"{unique_id}_{zone}").lower().replace(" ", "_")
         self.name = name
         self.zone = zone
         self.up = up
@@ -137,10 +150,10 @@ class DeviceManager:
 
     def get_devices_by_type(self, device_type: str):
         """Get devices by type."""
-        if device_type == "lights":
+        if device_type == LIGHT_DEVICES:
             return self._lights
 
-        if device_type == "covers":
+        if device_type == COVER_DEVICES:
             return self._covers
 
         return None
@@ -165,7 +178,7 @@ class DeviceManager:
             if device.unique_id == id:
                 return device
 
-    async def async_handle_light_state_change(self, module_number, channel, state):
+    async def async_handle_zone_state_change(self, module_number, channel, state):
         """Update device intensity."""
         for light in self._lights:
             for address in light.address:
@@ -188,13 +201,13 @@ class DeviceManager:
                 # Propagate changes to every address
                 for address in device.address:
                     value = 0
-                    if address["name"] == "r":
+                    if address["name"] == IFSEI_ATTR_RED:
                         value = colors[0]
-                    elif address["name"] == "g":
+                    elif address["name"] == IFSEI_ATTR_GREEN:
                         value = colors[1]
-                    elif address["name"] == "b":
+                    elif address["name"] == IFSEI_ATTR_BLUE:
                         value = colors[2]
-                    elif address["name"] == "w":
+                    elif address["name"] == IFSEI_ATTR_BRIGHTNESS:
                         value = colors[3]
 
                     await self._ifsei.async_set_zone_intensity(
@@ -205,17 +218,26 @@ class DeviceManager:
 
                 return
 
-    async def async_handle_scene_state_change(self, change_address: str):
+    async def async_handle_scene_state_change(self, change_address: str, state: str):
         """Update scene."""
         kwargs = {}
         for cover in self._covers:
             if change_address in [cover.up, cover.down, cover.stop]:
                 if change_address == cover.up:
-                    kwargs = {"command": "up"}
+                    kwargs = {
+                        IFSEI_ATTR_COMMAND: IFSEI_COVER_UP,
+                        IFSEI_ATTR_STATE: state,
+                    }
                 elif change_address == cover.down:
-                    kwargs = {"command": "down"}
+                    kwargs = {
+                        IFSEI_ATTR_COMMAND: IFSEI_COVER_DOWN,
+                        IFSEI_ATTR_STATE: state,
+                    }
                 elif change_address == cover.stop:
-                    kwargs = {"command": "stop"}
+                    kwargs = {
+                        IFSEI_ATTR_COMMAND: IFSEI_COVER_STOP,
+                        IFSEI_ATTR_STATE: state,
+                    }
 
                 if cover.callback_ is not None:
                     cover.callback_(**kwargs)

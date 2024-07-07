@@ -76,7 +76,7 @@ class ScenarioValidator:
             _LOGGER.debug(f"Failed to connect to controller, error: {e}")  # noqa: G004
             return False
         else:
-            _LOGGER.debug("Connected to ifsei from config flow")
+            _LOGGER.debug("Disconnected ifsei from config flow")
             return True
 
 

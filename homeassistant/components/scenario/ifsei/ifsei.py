@@ -13,6 +13,13 @@ import socket
 import telnetlib3
 from telnetlib3 import TelnetClient, TelnetReader, TelnetWriter
 
+from .const import (
+    BUFFER_SIZE,
+    DEVICE_FILE,
+    ERROR_CODES,
+    IFSEI_ATTR_SEND_DELAY,
+    RESPONSE_TERMINATOR,
+)
 from .manager import DeviceManager
 
 logger = logging.getLogger(__name__)
@@ -25,26 +32,12 @@ class Protocol(Enum):
     UDP = 2
 
 
-RESPONSE_TERMINATOR = ">"
-BUFFER_SIZE = 1024
-RETRY_DELAY = 5  # Delay in seconds before retrying connection
-IFSEI_ATTR_SEND_DELAY = 0.2  # Delay in seconds between messages
-DEVICE_FILE = "device_config.yaml"
-
-ERROR_CODES = {
-    "E1": "Buffer overflow on input. Too many characters were sent without sending the <CR> character.",
-    "E2": "Buffer overflow on output. Too much traffic on the Classic-NET and the IFSEI is unable to transmit the commands to the controller.",
-    "E3": "Non-existent module addressed.",
-    "E4": "Syntax error. The controller sent a command that was not recognized by the IFSEI.",
-}
-
-
 @dataclass
 class NetworkConfiguration:
     """A class that represents the default network configuration."""
 
     host: str = "192.168.1.20"
-    tcp_port: int = 23
+    tcp_port: int = 28000
     udp_port: int = 25200
     protocol: Protocol = Protocol.TCP
 
@@ -134,6 +127,7 @@ class IFSEI:
                 self.network_config.tcp_port,
                 client_factory=self._create_client,
             )
+
         except (ConnectionRefusedError, TimeoutError) as e:
             logger.error(
                 "Failed to connect to %s:%s: %s.",
@@ -211,6 +205,7 @@ class IFSEI:
 
         if response == "*IFSEION":
             self.set_is_connected(True)
+            await self.async_monitor(7)
 
         elif response.startswith("*Z"):
             await self._async_handle_zone_response(response)
@@ -230,16 +225,27 @@ class IFSEI:
         logger.info(
             "Zone %s state: %s intensity: %s", module_number, channel, intensity
         )
-        await self.device_manager.async_handle_light_state_change(
-            module_number, channel, intensity
-        )
+
+        if self.device_manager is not None:
+            await self.device_manager.async_handle_zone_state_change(
+                module_number, channel, intensity
+            )
+        else:
+            logger.info("No device manager found")
 
     async def _async_handle_scene_response(self, response):
         """Handle a scene response from the IFSEI device."""
-        # Scene status: *C{address:4}1
+        # Scene status: *C{address:4}{state:1} 1/0
         address = str(response[2:6])
-        logger.info("Scene address %s", address)
-        await self.device_manager.async_handle_scene_state_change(address)
+        state = str(response[6:7])
+        logger.info(
+            "Scene response: %s, address: %s, state: %s", response, address, state
+        )
+
+        if self.device_manager is not None:
+            await self.device_manager.async_handle_scene_state_change(address, state)
+        else:
+            logger.info("No device manager found")
 
     async def _async_handle_error(self, response):
         """Handle an error response from the IFSEI device."""
@@ -264,6 +270,8 @@ class IFSEI:
         if self.device_manager is not None:
             logger.info("Set ifsei availability to: %s", is_available)
             self.device_manager.notify_subscriber(available=is_available)
+        else:
+            logger.info("No device manager found")
 
     # Commands for control/configuration
     async def async_get_version(self):
@@ -293,8 +301,8 @@ class IFSEI:
     async def async_monitor(self, level: int):
         """Monitor the network."""
         if level < 1 or level > 7:
-            raise ValueError("Monitor level must be between 1 and 6")
-        return await self.async_send_command(f"$MON{level}")
+            raise ValueError("Monitor level must be between 1 and 7")
+        return await self.async_send_command(f"MON{level}")
 
     # Commands for the Scenario Classic-NET network
     async def async_change_scene(self, module_address, scene_number):
@@ -328,7 +336,7 @@ class IFSEI:
 
     async def async_set_shader_state(self, module_address: str):
         """Set shader state."""
-        return await self.async_send_command(f"C{module_address:04}1")
+        return await self.async_send_command(f"C{module_address:04}")
 
     async def async_get_zone_intensity(self, module_address, zone_number):
         """Get zone intensity."""

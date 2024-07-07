@@ -273,8 +273,8 @@ lights:
     isRGB: true
     address:
       - name: r
-        module: 4
-        channel: 6
+        module: 7
+        channel: 1
         isDimmeable: true
       - name: g
         module: 7
