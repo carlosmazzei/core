@@ -56,7 +56,7 @@ class ScenarioLight(ScenarioUpdatableEntity, LightEntity):
         """Initialize a scenario light."""
         super().__init__(light, ifsei)
         self._attr_available = ifsei.is_connected
-
+        self.zone = light.zone
         addresses = light.get_address()
 
         if not light.get_is_rgb():
@@ -143,6 +143,7 @@ class ScenarioLight(ScenarioUpdatableEntity, LightEntity):
 
         if available is not None:
             self._attr_available = available
+            _LOGGER.debug("Set device %s availability to %s", self.name, available)
 
         if (
             brightness is not None
