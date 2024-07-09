@@ -13,13 +13,7 @@ import socket
 import telnetlib3
 from telnetlib3 import TelnetClient, TelnetReader, TelnetWriter
 
-from .const import (
-    BUFFER_SIZE,
-    DEVICE_FILE,
-    ERROR_CODES,
-    IFSEI_ATTR_SEND_DELAY,
-    RESPONSE_TERMINATOR,
-)
+from .const import DEVICE_FILE, ERROR_CODES, IFSEI_ATTR_SEND_DELAY, RESPONSE_TERMINATOR
 from .manager import DeviceManager
 
 logger = logging.getLogger(__name__)
@@ -75,8 +69,9 @@ class IFSEI:
         self.device_manager: DeviceManager | None = None
         self.is_connected: bool = False
         self.is_closing: bool = False
+        self._send_delay: float = IFSEI_ATTR_SEND_DELAY
         self._reconnect_task: Task | None = None
-        self._telnetclient: TelnetClient | None = None
+        self._telnetclient: _IFSEITelnetClient | None = None
 
     @classmethod
     def from_config(cls, config_file):
@@ -90,8 +85,7 @@ class IFSEI:
         )
         return cls(network_config=network_config)
 
-    @staticmethod
-    def _load_config(config_file):
+    def _load_config(self, config_file):
         """Load config file and return it."""
         logger.info("Reading from log file: %s", config_file)
         with open(config_file, encoding="utf-8") as file:
@@ -104,9 +98,13 @@ class IFSEI:
         current_directory = os.path.dirname(absolute_module_path)
         target_file_name = DEVICE_FILE
         target_file_path = os.path.join(current_directory, target_file_name)
-
         self.device_manager = DeviceManager.from_config(target_file_path, self)
-        self.is_connected = False
+
+    def set_send_delay(self, delay: float):
+        """Set send delay."""
+        if self._telnetclient is not None:
+            self._telnetclient.send_delay = delay
+        logger.info("Send delay set to: %s", delay)
 
     async def async_connect(self) -> bool:
         """Connect to the IFSEI device."""
@@ -150,7 +148,7 @@ class IFSEI:
     def _create_client(self, **kwds):
         """Create a telnet client using the factory."""
         self._telnetclient = telnetclient = _IFSEITelnetClient(
-            self, self.queue_manager, self.on_connection_lost, **kwds
+            self.queue_manager, self.on_connection_lost, **kwds
         )
         return telnetclient
 
@@ -231,7 +229,7 @@ class IFSEI:
                 module_number, channel, intensity
             )
         else:
-            logger.info("No device manager found")
+            logger.info("Cannot handle zone response (no device manager found)")
 
     async def _async_handle_scene_response(self, response):
         """Handle a scene response from the IFSEI device."""
@@ -245,7 +243,7 @@ class IFSEI:
         if self.device_manager is not None:
             await self.device_manager.async_handle_scene_state_change(address, state)
         else:
-            logger.info("No device manager found")
+            logger.info("Cannot handle scene response (no device manager found)")
 
     async def _async_handle_error(self, response):
         """Handle an error response from the IFSEI device."""
@@ -271,7 +269,7 @@ class IFSEI:
             logger.info("Set ifsei availability to: %s", is_available)
             self.device_manager.notify_subscriber(available=is_available)
         else:
-            logger.info("No device manager found")
+            logger.info("Cannot set device availability (no device manager found)")
 
     # Commands for control/configuration
     async def async_get_version(self):
@@ -380,7 +378,6 @@ class _IFSEITelnetClient(TelnetClient):
 
     def __init__(
         self,
-        connection: IFSEI,
         queue_manager: QueueManager,
         on_connection_lost_callback: Callable[[], None] | None,
         *args,
@@ -388,9 +385,10 @@ class _IFSEITelnetClient(TelnetClient):
     ) -> None:
         """Initialize protocol to handle connection errors."""
         super().__init__(*args, **kwds)
-        self.connection = connection
+        self.protocol: Protocol = Protocol.TCP
         self.task_manager = TaskManager()
         self.queue_manager = queue_manager
+        self.send_delay = IFSEI_ATTR_SEND_DELAY
         self.shell = self._async_run_shell
         self.on_connection_lost_callback: Callable[[], None] | None = (
             on_connection_lost_callback
@@ -430,11 +428,14 @@ class _IFSEITelnetClient(TelnetClient):
             logger.info("Starting data sending loop")
             while True:
                 command = await self.queue_manager.send_queue.get()
-                if self.connection.network_config.protocol == Protocol.TCP:
+                if self.protocol == Protocol.TCP:
                     await self._async_send_command_tcp(command)
-                elif self.connection.network_config.protocol == Protocol.UDP:
-                    self._send_command_udp(command)
-                await asyncio.sleep(IFSEI_ATTR_SEND_DELAY)
+                elif self.protocol == Protocol.UDP:
+                    raise NotImplementedError
+                if self.writer.connection_closed:
+                    logger.info("Closed connection, send data ending")
+                    break
+                await asyncio.sleep(self.send_delay)
         except asyncio.CancelledError:
             logger.info("Send task cancelled")
 
@@ -454,31 +455,19 @@ class _IFSEITelnetClient(TelnetClient):
 
     def _send_command_udp(self, command):
         """Send command using UDP."""
-        try:
-            self.connection.udp_socket.sendto(
-                (command + "\r").encode(),
-                (
-                    self.connection.network_config.host,
-                    self.connection.network_config.udp_port,
-                ),
-            )
-            logger.info("Command sent (UDP): %s", command)
-
-        except Exception as e:
-            logger.error("Failed to send command %s over UDP: %s", command, e)
-            raise
+        raise NotImplementedError
 
     async def _async_receive_data(self):
         """Receive data from the IFSEI device."""
         try:
             logger.info("Starting data receiving loop")
             while True:
-                if self.connection is None:
-                    await asyncio.sleep(0.1)  # Wait for the reader to be set
-                    continue
                 response = await self._async_read_until_prompt()
                 if response:
                     await self.queue_manager.receive_queue.put(response)
+                if self.reader.connection_closed:
+                    logger.info("Closed connection, receive data ending")
+                    break
         except Exception as e:
             logger.error("Error receiving data: %s", e)
             raise
@@ -488,12 +477,15 @@ class _IFSEITelnetClient(TelnetClient):
         try:
             response = ""
             while True:
-                if self.connection.network_config.protocol == Protocol.TCP:
+                if self.protocol == Protocol.TCP:
                     char = await self.reader.read(1)
-                elif self.connection.network_config.protocol == Protocol.UDP:
-                    char, _ = await self.connection.udp_socket.recvfrom(BUFFER_SIZE)
+                elif self.protocol == Protocol.UDP:
+                    raise NotImplementedError
                 response += char
-                if response.endswith(RESPONSE_TERMINATOR):
+                if (
+                    response.endswith(RESPONSE_TERMINATOR)
+                    or self.reader.connection_closed
+                ):
                     break
             return response.strip()[:-2]
         except asyncio.exceptions.CancelledError:

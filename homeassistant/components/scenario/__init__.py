@@ -8,6 +8,7 @@ import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
+    CONF_DELAY,
     CONF_HOST,
     CONF_PORT,
     CONF_PROTOCOL,
@@ -29,7 +30,7 @@ from .const import (
     MANUFACTURER,
     YAML_DEVICES,
 )
-from .ifsei.const import COVER_DEVICES, LIGHT_DEVICES
+from .ifsei.const import COVER_DEVICES, IFSEI_ATTR_SEND_DELAY, LIGHT_DEVICES
 from .ifsei.ifsei import IFSEI, NetworkConfiguration, Protocol
 from .ifsei.manager import Device
 
@@ -98,6 +99,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry_data[LIGHTS_ENTRY] = ifsei.device_manager.get_devices_by_type(LIGHT_DEVICES)
     entry_data[COVERS_ENTRY] = ifsei.device_manager.get_devices_by_type(COVER_DEVICES)
 
+    # Load options from config entry
+    entry_data[CONF_DELAY] = entry.options.get(CONF_DELAY, IFSEI_ATTR_SEND_DELAY)
+    ifsei.set_send_delay(entry_data[CONF_DELAY])
+
     async def on_hass_stop(event: Event) -> None:
         """Stop push updates when hass stops."""
         await ifsei.async_close()
@@ -105,7 +110,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(
         hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, on_hass_stop)
     )
-    entry.async_on_unload(ifsei.async_close)
+
+    async def update_listener(hass, entry):
+        """Handle options update."""
+        entry_data[CONF_DELAY] = entry.options.get(CONF_DELAY, IFSEI_ATTR_SEND_DELAY)
+        ifsei.set_send_delay(entry_data[CONF_DELAY])
+
+    entry.async_on_unload(entry.add_update_listener(update_listener))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -145,6 +156,7 @@ class ScenarioUpdatableEntity(Entity):
         self._ifsei = ifsei
         self._device = device
         self._attr_name = device.name
+        self._attr_available = ifsei.is_connected
         self._attr_unique_id = device.unique_id
         self._device_name = ifsei.name
         self._device_manufacturer = MANUFACTURER

@@ -55,15 +55,16 @@ class ScenarioCover(ScenarioUpdatableEntity, CoverEntity):
         self._attr_is_closed = True
         self._attr_available = ifsei.is_connected
         self.assumed_state = True  # Allow all commands to be enabled (no half-open / half-closed state allowed)
+        self._device.add_subscriber(self.async_update_callback)
 
     @property
     def is_closed(self) -> bool | None:
         """Return true if cover is closed."""
         return self._attr_is_closed
 
-    async def async_added_to_hass(self):
-        """Register callbacks."""
-        self._device.add_subscriber(self.async_update_callback)
+    # async def async_added_to_hass(self):
+    #     """Register callbacks."""
+    #     self._device.add_subscriber(self.async_update_callback)
 
     async def async_open_cover(self, **kwargs):
         """Open the cover."""

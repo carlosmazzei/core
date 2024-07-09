@@ -1,17 +1,25 @@
 """Config flow for Scenario IFSEI."""
 
+from ipaddress import AddressValueError, IPv4Address
 import logging
 from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
-from homeassistant.const import CONF_HOST, CONF_PORT, CONF_PROTOCOL
-from homeassistant.core import HomeAssistant
+from homeassistant import config_entries
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
+from homeassistant.const import CONF_DELAY, CONF_HOST, CONF_PORT, CONF_PROTOCOL
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import selector
+from homeassistant.helpers import config_validation as cv, selector
 
 from .const import CONF_CONTROLLER_UNIQUE_ID, DOMAIN
+from .ifsei.const import IFSEI_ATTR_SEND_DELAY
 from .ifsei.ifsei import IFSEI, NetworkConfiguration, Protocol
 
 _LOGGER = logging.getLogger(__name__)
@@ -47,38 +55,6 @@ class ScenarioValidator:
             )
         )
 
-    async def connect_to_ifsei(self) -> bool:
-        """Connect to IFSEI interface."""
-        try:
-            await self.ifsei.async_connect()
-        except (
-            TimeoutError,
-            ConnectionRefusedError,
-            ConnectionAbortedError,
-            ConnectionError,
-        ) as e:
-            _LOGGER.debug(f"Failed to connect to controller, error: {e}")  # noqa: G004
-            return False
-        else:
-            _LOGGER.debug("Connected to ifsei from config flow")
-            return True
-
-    async def disconnect_from_ifsei(self) -> bool:
-        """Disconnect to IFSEI interface."""
-        try:
-            await self.ifsei.async_close()
-        except (
-            TimeoutError,
-            ConnectionRefusedError,
-            ConnectionAbortedError,
-            ConnectionError,
-        ) as e:
-            _LOGGER.debug(f"Failed to connect to controller, error: {e}")  # noqa: G004
-            return False
-        else:
-            _LOGGER.debug("Disconnected ifsei from config flow")
-            return True
-
 
 class ScenarioConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Scenario."""
@@ -101,15 +77,12 @@ class ScenarioConfigFlow(ConfigFlow, domain=DOMAIN):
             _LOGGER.debug(
                 f"User input, host:{user_input[CONF_HOST]}, port: {user_input[CONF_PORT]}, protocol:{user_input[CONF_PROTOCOL]}"  # noqa: G004
             )
-            try:
-                if not await scenario.connect_to_ifsei():
-                    raise CannotConnect
-            except CannotConnect:
-                errors["base"] = "cannot_connect"
 
-            await (
-                scenario.disconnect_from_ifsei()
-            )  # Make sure there are no two clients after config
+            # Check if the IP address is a valid IPv4 address.
+            try:
+                IPv4Address(user_input[CONF_HOST])
+            except AddressValueError:
+                errors["base"] = "invalid_ip"
 
             if not errors:
                 controller_unique_id = scenario.ifsei.get_device_id()
@@ -127,6 +100,41 @@ class ScenarioConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user", data_schema=DATA_SCHEMA, errors=errors
         )
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
+        """Create the options flow."""
+        return OptionsFlowHandler(config_entry)
+
+
+class OptionsFlowHandler(OptionsFlow):
+    """Handle a option flow for Scenario."""
+
+    def __init__(self, config_entry: ConfigEntry) -> None:
+        """Initialize options flow."""
+        self.config_entry = config_entry
+
+    async def async_step_init(self, user_input=None):
+        """Handle options flow."""
+        if user_input is not None:
+            return self.async_create_entry(
+                title="Send delay time (ms)", data=user_input
+            )
+
+        data_schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_DELAY,
+                    default=self.config_entry.options.get(
+                        CONF_DELAY, IFSEI_ATTR_SEND_DELAY
+                    ),
+                ): vol.All(cv.positive_float, vol.Clamp(min=0.1, max=0.5)),
+            }
+        )
+        return self.async_show_form(step_id="init", data_schema=data_schema)
 
 
 class CannotConnect(HomeAssistantError):

@@ -58,6 +58,7 @@ class ScenarioLight(ScenarioUpdatableEntity, LightEntity):
         self._attr_available = ifsei.is_connected
         self.zone = light.zone
         addresses = light.get_address()
+        light.add_subscriber(self.async_update_callback)
 
         if not light.get_is_rgb():
             for address in addresses:
@@ -70,6 +71,8 @@ class ScenarioLight(ScenarioUpdatableEntity, LightEntity):
         else:
             self._attr_color_mode = ColorMode.RGB
             self._attr_supported_color_modes = {ColorMode.RGB}
+
+        # self._device.add_subscriber(self.async_update_callback)
 
     @property
     def is_on(self) -> bool:
@@ -124,9 +127,9 @@ class ScenarioLight(ScenarioUpdatableEntity, LightEntity):
         """Turn the light off."""
         await self._async_set_brightness(0, **kwargs)
 
-    async def async_added_to_hass(self):
-        """Register callbacks."""
-        self._device.add_subscriber(self.async_update_callback)
+    # async def async_added_to_hass(self):
+    #     """Register callbacks."""
+    #     self._device.add_subscriber(self.async_update_callback)
 
     async def async_will_remove_from_hass(self):
         """Remove callbacks."""
